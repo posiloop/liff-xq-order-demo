@@ -11,6 +11,9 @@
     --brand:#d97706; --brand-soft:#fff7e8; --ok:#0f7b3f; --bad:#b42318;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  /* 🔴 手機上任何一欄被切掉都很難發現（截圖才看得到）。這兩行是硬防線：
+     頁面永遠不准比視窗寬，表格改固定版面、欄寬自己指定。 */
+  html,body{max-width:100%;overflow-x:hidden}
   body{margin:0;background:var(--bg);color:var(--ink);
        font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",system-ui,sans-serif;
        font-size:16px;line-height:1.55;padding-bottom:96px}
@@ -29,7 +32,7 @@
         padding:14px;margin-bottom:12px}
   .meta{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--muted);font-size:13.5px}
   .meta b{color:var(--ink)}
-  table{width:100%;border-collapse:collapse;background:var(--card);
+  table{width:100%;table-layout:fixed;border-collapse:collapse;background:var(--card);
         border:1px solid var(--line);border-radius:12px;overflow:hidden}
   th,td{padding:9px 6px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}
   th{background:#f0efec;font-weight:600;font-size:13px;color:#444}
@@ -37,7 +40,7 @@
   tr:last-child td{border-bottom:0}
   .name{font-weight:600}
   .spec{color:var(--muted);font-size:12.5px}
-  input[type=number]{width:62px;padding:8px;border:1.5px solid var(--line);border-radius:8px;
+  input[type=number]{width:100%;max-width:78px;padding:8px;border:1.5px solid var(--line);border-radius:8px;
                      font-size:16px;text-align:right;background:#fff}
   input[type=number]:focus{outline:0;border-color:var(--brand);background:var(--brand-soft)}
   .moqbad{border-color:var(--bad)!important;background:#fef4f2!important}
@@ -76,7 +79,7 @@
 <body>
 
 <div class="demo-bar" id="demoBar">
-  這是<b>雛形展示</b>，資料是假的、送出不會進任何系統。可切換身分看不同畫面 →
+  <b>雛形展示</b>·資料是假的、送出不會進系統<br>切換身分看不同畫面
   <select id="roleSel" style="width:auto;display:inline-block;padding:2px 6px;font-size:12px;margin-left:6px">
     <option value="store">店長（江南店）</option>
     <option value="new">第一次進來的人</option>
@@ -102,7 +105,7 @@
     </div>
     <table>
       <thead><tr>
-        <th>品項</th><th class="num">MOQ</th><th class="num">數量</th><th class="num">小計</th>
+        <th style="width:42%">品項</th><th class="num" style="width:13%">MOQ</th><th class="num" style="width:22%">數量</th><th class="num" style="width:23%">小計</th>
       </tr></thead>
       <tbody id="tb"></tbody>
     </table>
