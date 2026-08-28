@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>享奇雞 叫貨系統（雛形）</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root{
+    --bg:#f5f5f3; --card:#fff; --line:#e0ddd8; --ink:#1c1c1c; --muted:#6b6b6b;
+    --brand:#d97706; --brand-soft:#fff7e8; --ok:#0f7b3f; --bad:#b42318;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",system-ui,sans-serif;
+       font-size:16px;line-height:1.55;padding-bottom:96px}
+  header{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;
+         padding:calc(env(safe-area-inset-top) + 12px) 14px 12px;
+         display:flex;align-items:center;gap:10px}
+  header .t{font-weight:700;font-size:17px;flex:1;min-width:0}
+  header .t small{display:block;font-weight:400;opacity:.9;font-size:12.5px}
+  .iconbtn{background:rgba(255,255,255,.18);border:0;color:#fff;width:38px;height:38px;
+           border-radius:10px;font-size:19px;line-height:1;cursor:pointer}
+  .demo-bar{background:#1c1c1c;color:#ffd48a;font-size:12.5px;padding:7px 14px;text-align:center}
+  .demo-bar b{color:#fff}
+  main{padding:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+        padding:14px;margin-bottom:12px}
+  .meta{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--muted);font-size:13.5px}
+  .meta b{color:var(--ink)}
+  table{width:100%;border-collapse:collapse;background:var(--card);
+        border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}
+  th{background:#f0efec;font-weight:600;font-size:13px;color:#444}
+  td.num,th.num{text-align:right;white-space:nowrap}
+  tr:last-child td{border-bottom:0}
+  .name{font-weight:600}
+  .spec{color:var(--muted);font-size:12.5px}
+  input[type=number]{width:74px;padding:8px;border:1.5px solid var(--line);border-radius:8px;
+                     font-size:16px;text-align:right;background:#fff}
+  input[type=number]:focus{outline:0;border-color:var(--brand);background:var(--brand-soft)}
+  .moqbad{border-color:var(--bad)!important;background:#fef4f2!important}
+  .rowmsg{color:var(--bad);font-size:12px;display:none}
+  .rowmsg.show{display:block}
+  .foot{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
+        padding:10px 14px calc(env(safe-area-inset-bottom) + 10px);z-index:20}
+  .sum{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;font-size:14px}
+  .sum .big{font-size:20px;font-weight:700}
+  button.primary{width:100%;padding:14px;border:0;border-radius:12px;background:var(--brand);
+                 color:#fff;font-size:17px;font-weight:700;cursor:pointer}
+  button.primary:disabled{background:#c9c5bf}
+  button.ghost{width:100%;padding:12px;border:1.5px solid var(--line);border-radius:12px;
+               background:#fff;font-size:15px;cursor:pointer;margin-top:8px}
+  .screen{display:none} .screen.on{display:block}
+  .center{text-align:center;padding:44px 20px}
+  .center h2{margin:14px 0 6px;font-size:19px}
+  .center p{color:var(--muted);margin:0 0 18px}
+  .big-emoji{font-size:46px}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12.5px;
+        background:var(--brand-soft);color:#a45500;border:1px solid #f0d9ae}
+  .pending{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+  .pending .who{font-weight:600}
+  .pending .sub{color:var(--muted);font-size:13px}
+  .row2{display:flex;gap:8px;margin-top:8px}
+  .row2 button{flex:1;padding:10px;border-radius:9px;border:1.5px solid var(--line);
+               background:#fff;font-size:14px;cursor:pointer}
+  .row2 .yes{background:var(--ok);border-color:var(--ok);color:#fff}
+  .row2 .no{color:var(--bad)}
+  select{width:100%;padding:11px;border:1.5px solid var(--line);border-radius:9px;font-size:15px;background:#fff}
+  .h3{font-weight:700;margin:18px 0 8px;font-size:15px}
+  .note{color:var(--muted);font-size:12.5px;margin-top:6px}
+  .done-box{background:var(--brand-soft);border:1.5px solid var(--brand);border-radius:12px;padding:16px}
+</style>
+</head>
+<body>
+
+<div class="demo-bar" id="demoBar">
+  這是<b>雛形展示</b>，資料是假的、送出不會進任何系統。可切換身分看不同畫面 →
+  <select id="roleSel" style="width:auto;display:inline-block;padding:2px 6px;font-size:12px;margin-left:6px">
+    <option value="store">店長（江南店）</option>
+    <option value="new">第一次進來的人</option>
+    <option value="admin">軒徹（管理者）</option>
+  </select>
+</div>
+
+<header>
+  <div class="t">享奇雞 叫貨<small id="hdrSub">台北江南店</small></div>
+  <button class="iconbtn" id="gearBtn" title="設定" style="display:none">⚙</button>
+</header>
+
+<!-- ① 店長：填叫貨單 -->
+<section class="screen on" id="scrOrder">
+  <main>
+    <div class="card">
+      <div class="meta">
+        <span>訂購日 <b id="dOrder">—</b></span>
+        <span>預計到貨 <b id="dArrive">—</b></span>
+        <span>單號 <b id="dNo">—</b></span>
+      </div>
+      <div class="note">只要填「叫貨數量」，其他都是系統帶出來的。數量要是 MOQ 的倍數。</div>
+    </div>
+    <table>
+      <thead><tr>
+        <th>品項</th><th class="num">MOQ</th><th class="num">單價</th><th class="num">數量</th><th class="num">小計</th>
+      </tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+    <div class="note" style="margin-top:10px">※ 以上為<b>範例品項</b>，正式版會帶出該店真正的可叫品項。</div>
+  </main>
+  <div class="foot">
+    <div class="sum"><span>合計</span><span class="big">$<span id="total">0</span></span></div>
+    <button class="primary" id="submitBtn" disabled>填寫完畢，送出</button>
+  </div>
+</section>
+
+<!-- ② 送出後 -->
+<section class="screen" id="scrDone">
+  <main>
+    <div class="center">
+      <div class="big-emoji">✅</div>
+      <h2>已送出</h2>
+      <p>軒徹那邊已經收到，不用再回「填寫完畢」了。</p>
+    </div>
+    <div class="done-box">
+      <div style="font-weight:700;margin-bottom:6px">台北江南店 叫貨單</div>
+      <div class="meta" style="margin-bottom:12px">
+        <span>單號 <b id="dNo2">—</b></span><span>合計 <b>$<span id="total2">0</span></b></span>
+      </div>
+      <button class="ghost" onclick="alert('雛形展示：正式版這裡會下載當天的叫貨單 PDF。')">📄 下載叫貨單 PDF</button>
+    </div>
+    <button class="ghost" onclick="show('scrOrder')">← 回去看填的內容</button>
+  </main>
+</section>
+
+<!-- ③ 第一次進來的人：申請權限 -->
+<section class="screen" id="scrApply">
+  <main>
+    <div class="center">
+      <div class="big-emoji">🔒</div>
+      <h2>需要先開通</h2>
+      <p>你還沒有叫貨權限。<br>送出申請後，由軒徹確認你是哪一間店。</p>
+    </div>
+    <div class="card">
+      <div class="h3">你是哪一間店？</div>
+      <select id="applyStore">
+        <option>台北江南店</option><option>台北瑞湖店</option><option>台北昆陽店</option>
+        <option>新北中和店</option><option>台中逢甲店</option><option>台北錦州店</option>
+        <option>台南永華店</option><option>汐止中興店</option>
+      </select>
+      <div class="note">送出後軒徹會在「設定」裡看到你的申請。通過之前進不來。</div>
+      <button class="primary" style="margin-top:12px"
+        onclick="alert('雛形展示：正式版會把申請送給軒徹審核。');">送出申請</button>
+    </div>
+  </main>
+</section>
+
+<!-- ④ 軒徹：設定 -->
+<section class="screen" id="scrAdmin">
+  <main>
+    <div class="card">
+      <div style="font-weight:700">設定<span class="pill" style="margin-left:8px">只有你看得到</span></div>
+      <div class="note">這個齒輪只有你（和哲安）點得進來，店長點不到。</div>
+    </div>
+
+    <div class="h3">待審核的申請（2）</div>
+    <div class="pending">
+      <div class="who">阿修</div>
+      <div class="sub">申請：台北江南店 · 今天 16:40</div>
+      <div class="row2">
+        <button class="yes" onclick="alert('雛形展示：通過後他就能進來叫貨。')">通過</button>
+        <button class="no" onclick="alert('雛形展示：拒絕後他仍然進不來。')">拒絕</button>
+      </div>
+    </div>
+    <div class="pending">
+      <div class="who">昆陽店-小美</div>
+      <div class="sub">申請：台北昆陽店 · 今天 15:02</div>
+      <div class="row2">
+        <button class="yes" onclick="alert('雛形展示')">通過</button>
+        <button class="no" onclick="alert('雛形展示')">拒絕</button>
+      </div>
+    </div>
+
+    <div class="h3">已開通的人</div>
+    <div class="pending"><div class="who">江南店-陳店長</div><div class="sub">台北江南店</div></div>
+    <div class="pending"><div class="who">瑞湖店-曾店長</div><div class="sub">台北瑞湖店</div></div>
+    <div class="note">每個 LINE 帳號綁一間店，點進來就只看得到自己那張。</div>
+
+    <button class="ghost" style="margin-top:16px" onclick="show('scrOrder')">← 回叫貨畫面</button>
+  </main>
+</section>
+
+<script>
+/* ───────── 雛形用的假資料。正式版這裡改成讀 ERP 的可叫品項。 ───────── */
+const ITEMS = [
+  {n:"土雞肉丁", s:"1Kg/包",  moq:12, u:"包", p:62},
+  {n:"熟筍絲",   s:"600g/包", moq:20, u:"包", p:59},
+  {n:"T6骨腿(2入)", s:"1Kg/包", moq:36, u:"包", p:93},
+  {n:"迷迭雞胸", s:"100g/包", moq:80, u:"包", p:28},
+  {n:"雞翅",     s:"1.2Kg/包", moq:8,  u:"包", p:200},
+  {n:"飯醬",     s:"22Kg/桶",  moq:1,  u:"桶", p:2200},
+];
+const qty = new Array(ITEMS.length).fill(0);
+
+function fmt(n){ return n.toLocaleString("en-US"); }
+function today(){ const d=new Date(); return (d.getMonth()+1)+"/"+d.getDate(); }
+function plusDays(k){ const d=new Date(); d.setDate(d.getDate()+k); return (d.getMonth()+1)+"/"+d.getDate(); }
+
+function render(){
+  const tb=document.getElementById("tb"); tb.innerHTML="";
+  ITEMS.forEach((it,i)=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML =
+      '<td><div class="name">'+it.n+'</div><div class="spec">'+it.s+' · '+it.u+'</div>'+
+        '<div class="rowmsg" id="msg'+i+'">要是 '+it.moq+' 的倍數</div></td>'+
+      '<td class="num">'+it.moq+'</td>'+
+      '<td class="num">'+it.p+'</td>'+
+      '<td class="num"><input type="number" min="0" step="1" inputmode="numeric" '+
+        'id="q'+i+'" value="" placeholder="0" oninput="chg('+i+')"></td>'+
+      '<td class="num" id="sub'+i+'">—</td>';
+    tb.appendChild(tr);
+  });
+  recalc();
+}
+function chg(i){
+  const el=document.getElementById("q"+i);
+  const v=parseInt(el.value||"0",10)||0;
+  qty[i]=v;
+  const bad = v>0 && v % ITEMS[i].moq !== 0;
+  el.classList.toggle("moqbad",bad);
+  document.getElementById("msg"+i).classList.toggle("show",bad);
+  document.getElementById("sub"+i).textContent = v>0 ? "$"+fmt(v*ITEMS[i].p) : "—";
+  recalc();
+}
+function recalc(){
+  let t=0,ok=false,bad=false;
+  ITEMS.forEach((it,i)=>{ if(qty[i]>0){ ok=true; t+=qty[i]*it.p;
+                                        if(qty[i]%it.moq!==0) bad=true; } });
+  document.getElementById("total").textContent=fmt(t);
+  document.getElementById("total2").textContent=fmt(t);
+  document.getElementById("submitBtn").disabled = !ok || bad;
+}
+function show(id){
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("on"));
+  document.getElementById(id).classList.add("on");
+  window.scrollTo(0,0);
+}
+document.getElementById("submitBtn").onclick=()=>show("scrDone");
+document.getElementById("gearBtn").onclick=()=>show("scrAdmin");
+
+function setRole(r){
+  document.getElementById("gearBtn").style.display = (r==="admin") ? "block" : "none";
+  document.getElementById("hdrSub").textContent =
+    r==="admin" ? "管理者檢視" : (r==="new" ? "尚未開通" : "台北江南店");
+  show(r==="new" ? "scrApply" : "scrOrder");
+}
+document.getElementById("roleSel").onchange = e => setRole(e.target.value);
+
+document.getElementById("dOrder").textContent = today();
+document.getElementById("dArrive").textContent = plusDays(7);
+const no = "2001" + new Date().toISOString().slice(2,10).replace(/-/g,"");
+document.getElementById("dNo").textContent = no;
+document.getElementById("dNo2").textContent = no;
+render(); setRole("store");
+
+/* ───────── LIFF：有就用，沒有就當一般網頁跑（雛形要能直接點開看） ─────────
+   正式版才會綁真的 LIFF ID，並用 liff.getProfile() 的 userId 決定這個人是哪一間店。 */
+(async ()=>{
+  const LIFF_ID = "";                       // 雛形留空：不進 LIFF 流程
+  if(!LIFF_ID || typeof liff === "undefined") return;
+  try{
+    await liff.init({liffId:LIFF_ID});
+    if(!liff.isLoggedIn()){ liff.login(); return; }
+    const p = await liff.getProfile();
+    console.log("LIFF userId:", p.userId);   // 正式版：拿這個對應到店
+    document.getElementById("demoBar").style.display="none";
+  }catch(e){ console.warn("LIFF init 失敗，改用一般網頁模式:", e); }
+})();
+</script>
+</body>
+</html>
