@@ -53,7 +53,11 @@
                      font-size:16px;text-align:center;background:#fff}
   /* 數量欄＝〔−〕〔輸入〕〔＋〕。加減一次跳一個 MOQ 倍數（MOQ 欄已拿掉，倍數規則改用按鈕表達）。
      🔴 flex 的子元素預設會被壓縮，手機上按鈕會縮成一條 —— 三個都要 flex:0 0 auto。 */
-  .qtybox{display:flex;align-items:center;justify-content:flex-end;gap:4px}
+  /* 「數量」表頭要對齊下面那組〔−〕〔格子〕〔＋〕（軒徹 2026-09-16 03:09 msg 24536）。
+     🔴 表頭靠右、下面那組也靠右，看起來還是沒對齊——因為對齊的是「整組的右緣」，
+        眼睛看的卻是**中間那個輸入格**。兩邊一律改置中，對的才是同一個基準。 */
+  th.qty{text-align:center}
+  .qtybox{display:flex;align-items:center;justify-content:center;gap:4px}
   .qtybox input[type=number]{flex:0 0 auto}
   .stp{flex:0 0 auto;width:28px;height:36px;padding:0;border:1.5px solid var(--line);border-radius:8px;
        background:#fff;color:var(--ink);font-size:18px;line-height:1;cursor:pointer}
@@ -120,7 +124,7 @@
     </div>
     <table>
       <thead><tr>
-        <th style="width:44%">品項</th><th class="num" style="width:34%">數量</th><th class="num" style="width:22%">小計</th>
+        <th style="width:44%">品項</th><th class="qty" style="width:34%">數量</th><th class="num" style="width:22%">小計</th>
       </tr></thead>
       <tbody id="tb"></tbody>
     </table>
@@ -273,15 +277,15 @@ function render(){
   const tb=document.getElementById("tb"); tb.innerHTML="";
   ITEMS.forEach((it,i)=>{
     /* 規格寫法（軒徹 msg 24529 指定）：每包幾隻 * 每箱幾包。例：10隻/包*8/箱、2隻/包*36/箱。
-       成箱價同步改成 /箱 —— 舊寫法 $2,080/8包 跟前面的「*8/箱」是同一件事講兩次。 */
+       🔴 品名底下**不顯示單價**（軒徹 2026-09-16 03:09 msg 24536）。
+          it.box 仍然要留著 —— 小計與合計是 (數量÷MOQ)×成箱價算出來的，
+          ⛔ 不可因為「畫面不顯示」就把它從資料裡拿掉，那會讓金額變成 0。 */
     const specTxt = it.s + (it.moq ? "*"+it.moq+"/箱" : "");
-    const priceTxt = it.box ? ("$"+fmt(it.box)+"/箱") : "";
     const dueTxt = dueInfo(it.due).label;
     const tr=document.createElement("tr");
     tr.innerHTML =
       '<td><div class="name">'+it.n+'</div>'+
         '<div class="spec"><span>'+specTxt+'</span>'+
-          (priceTxt?' · <span>'+priceTxt+'</span>':'')+
           (dueTxt?' · <span>'+dueTxt+'</span>':'')+'</div>'+
         '<div class="rowmsg" id="msg'+i+'">要是 '+it.moq+' 的倍數</div></td>'+
       '<td class="num"><div class="qtybox">'+
