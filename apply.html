@@ -153,7 +153,19 @@
 // ⇒ B 現在就能用，A 等拿到 LIFF ID 填進去就自動升級，**頁面其他地方一行都不用改**。
 var LIFF_ID  = "";                 // ← 拿到 LIFF ID 填這裡（`liff.line.me/` 後面那串），其餘不用動
 var BOT_ID   = "@040xpvza";        // 叫貨機器人（GET /v2/bot/info 實查：displayName「叫貨機器人」）
-var ENDPOINT = "";                 // 保留：真有後端時優先走它（目前空＝不走）
+// 🔴 C 路的後端：機器人自己那條 cloudflared 隧道（本來就通，健康檢查 /xq/health 200）。
+//    ⛔ 這不是 Apps Script，不需要任何人去部署。
+var ENDPOINT = "https://hook.aemassinc.net/xq/apply";
+
+// ─── 身分從網址帶進來（軒徹 2026-09-16 01:47 msg 24502：「按送出就送出」）─────────
+// 🔴 這就是「不必等 LIFF ID」的關鍵：這頁的網址是**機器人在回覆某個人的當下**產的，
+//    那一刻它就知道按的人是誰 ⇒ 身分直接寫進 query，附 HMAC 簽章防冒名。
+//    ⛔ 不要把「有沒有 LIFF」跟「送不送得出去」綁在一起——那是 01:26 我判斷錯的地方。
+function qs(k){
+  var m = new RegExp("[?&]" + k + "=([^&]*)").exec(window.location.search);
+  return m ? decodeURIComponent(m[1].replace(/\+/g, " ")) : "";
+}
+var Q_UID = qs("u"), Q_SIG = qs("s");
 
 var $ = function(id){ return document.getElementById(id); };
 var lineUserId = "";
@@ -188,18 +200,20 @@ function applyText(a){
        + "電話：" + a.phone;
 }
 
-function toWait(a, sent){
+function toWait(a, sent, code, why){
   $("kvStore").textContent = a.storeName;
   $("kvName").textContent  = a.name;
   $("kvPhone").textContent = a.phone;
   if (sent) {
     $("st2").className = "step ok";  $("st2").firstChild.textContent = "✓";
     $("st3").className = "step now"; $("st3").firstChild.textContent = "3";
-    $("waitBody").textContent = "你的申請已經送出，等管理員核准。";
+    $("waitBody").textContent = "你的申請已經送出，等管理員核准。"
+                              + (code ? "（代碼 " + code + "）" : "");
     $("waitFoot").textContent = "核准之後機器人會在聊天室通知你，那時候按「叫貨」就能用了。";
     $("manualBox").style.display = "none";
   } else {
-    $("waitBody").textContent = "資料填好了，還差最後一步才會送到管理員那邊。";
+    $("waitBody").textContent = "資料填好了，還差最後一步才會送到管理員那邊。"
+                              + (why ? "（" + why + "）" : "");
     $("waitFoot").textContent = "";
     $("manualBox").style.display = "block";
   }
@@ -233,13 +247,45 @@ $("submitBtn").onclick = function(){
     return;
   }
 
-  // B：沒 LIFF —— 先進「等待認證」頁，按鈕（真的是 <a>）帶他回聊天室按送出
+  // C：網址帶了簽過名的身分 —— 直接打後端，使用者不用再按任何東西。
+  //    🔴 失敗一律退回 B 並**說出原因**，⛔ 不可假裝送出了（那比多按一下嚴重得多）。
+  if (Q_UID && Q_SIG && ENDPOINT) {
+    $("submitBtn").disabled = true;
+    $("submitBtn").textContent = "送出中…";
+    fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ u: Q_UID, s: Q_SIG, text: text })
+    }).then(function(r){
+      return r.json().catch(function(){ return { ok: false, error: "http-" + r.status }; });
+    }).then(function(j){
+      $("submitBtn").disabled = false;
+      $("submitBtn").textContent = "4. 送出申請";
+      if (j && j.ok) {
+        if (j.handled === "apply-already-has-store") return fail(a.storeName + "你已經有權限了，不用再申請。");
+        if (j.handled === "apply-duplicate")         return fail("你上一張申請還在等核准，不用重複送。");
+        return toWait(a, true, j.code);
+      }
+      manualFallback(a, text, "後端沒收下（" + ((j && j.error) || "未知") + "）");
+    }).catch(function(e){
+      $("submitBtn").disabled = false;
+      $("submitBtn").textContent = "4. 送出申請";
+      manualFallback(a, text, "連不到後端");
+    });
+    return;
+  }
+
+  // B：沒 LIFF、網址也沒帶身分 —— 退回「回聊天室按送出」那條
+  manualFallback(a, text, "");
+};
+
+function manualFallback(a, text, why){
   // ⚠️ BOT_ID 不可 encodeURIComponent：`@` 會變 `%40`，那是路徑片段不是查詢值。
   //    只有後面的訊息本文要編碼。
   $("manualBtn").href = "https://line.me/R/oaMessage/" + BOT_ID
                       + "/?" + encodeURIComponent(text);
-  toWait(a, false);
-};
+  toWait(a, false, "", why);
+}
 
 function fail(m){ var e = $("err"); e.textContent = m; e.style.display = "block"; }
 </script>
