@@ -49,7 +49,7 @@
   /* 每一小段自己不斷行，⛔ 不要讓「$2,080/箱」被拆成「$2,080/」＋「箱」——
      拆開之後那個「箱」會貼在下一行開頭，看起來像另一個欄位。 */
   .spec span{white-space:nowrap}
-  input[type=number]{width:100%;max-width:46px;padding:8px 4px;border:1.5px solid var(--line);border-radius:8px;
+  input[type=number]{width:100%;max-width:48px;padding:8px 4px;border:1.5px solid var(--line);border-radius:8px;
                      font-size:16px;text-align:center;background:#fff}
   /* 數量欄＝〔−〕〔輸入〕〔＋〕。加減一次跳一個 MOQ 倍數（MOQ 欄已拿掉，倍數規則改用按鈕表達）。
      🔴 flex 的子元素預設會被壓縮，手機上按鈕會縮成一條 —— 三個都要 flex:0 0 auto。 */
@@ -57,10 +57,13 @@
      🔴 表頭靠右、下面那組也靠右，看起來還是沒對齊——因為對齊的是「整組的右緣」，
         眼睛看的卻是**中間那個輸入格**。兩邊一律改置中，對的才是同一個基準。 */
   th.qty{text-align:center}
-  .qtybox{display:flex;align-items:center;justify-content:center;gap:4px}
+  .qtybox{display:flex;align-items:center;justify-content:center;gap:3px}
   .qtybox input[type=number]{flex:0 0 auto}
-  .stp{flex:0 0 auto;width:28px;height:36px;padding:0;border:1.5px solid var(--line);border-radius:8px;
-       background:#fff;color:var(--ink);font-size:18px;line-height:1;cursor:pointer}
+  /* 單位（包／桶）直接貼在數字旁邊：input type=number 裡面塞不了字，只能放在外面。
+     ⛔ 不改成 type=text 去湊「8 包」—— 那會讓手機跳出全鍵盤而不是數字鍵盤。 */
+  .unit{flex:0 0 auto;color:var(--muted);font-size:12.5px;white-space:nowrap}
+  .stp{flex:0 0 auto;width:34px;height:40px;padding:0;border:1.5px solid var(--line);border-radius:9px;
+       background:#fff;color:var(--ink);font-size:21px;line-height:1;cursor:pointer}
   .stp:active{background:var(--brand-soft);border-color:var(--brand)}
   input[type=number]:focus{outline:0;border-color:var(--brand);background:var(--brand-soft)}
   .moqbad{border-color:var(--bad)!important;background:#fef4f2!important}
@@ -124,7 +127,7 @@
     </div>
     <table>
       <thead><tr>
-        <th style="width:44%">品項</th><th class="qty" style="width:34%">數量</th><th class="num" style="width:22%">小計</th>
+        <th style="width:38%">品項</th><th class="qty" style="width:42%">數量</th><th class="num" style="width:20%">小計</th>
       </tr></thead>
       <tbody id="tb"></tbody>
     </table>
@@ -292,6 +295,7 @@ function render(){
         '<button type="button" class="stp" onclick="step('+i+',-1)" aria-label="減一箱">−</button>'+
         '<input type="number" min="0" step="'+(it.moq||1)+'" inputmode="numeric" '+
           'id="q'+i+'" value="" placeholder="0" oninput="chg('+i+')">'+
+        '<span class="unit">'+(it.u||"")+'</span>'+
         '<button type="button" class="stp" onclick="step('+i+',1)" aria-label="加一箱">+</button>'+
       '</div></td>'+
       '<td class="num" id="sub'+i+'">—</td>';
