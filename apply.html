@@ -70,7 +70,7 @@
   <section class="screen on" id="scrForm">
     <div class="card">
       <p style="margin:0;font-size:14px">
-        你還沒有叫貨權限。填好下面三項送出，由軒徹確認你是哪一間店之後才會開通。
+        你還沒有叫貨權限。填好下面三項送出，由管理員確認你是哪一間店之後才會開通。
       </p>
     </div>
 
@@ -105,7 +105,7 @@
     <div class="card done">
       <div class="big" id="waitIcon">🕒</div>
       <h2 id="waitTitle">等待認證</h2>
-      <p class="note" id="waitBody">你的申請已經送出，等軒徹核准。</p>
+      <p class="note" id="waitBody">你的申請已經送出，等管理員核准。</p>
 
       <div class="kv">
         <div><span>店鋪</span><span id="kvStore">—</span></div>
@@ -116,7 +116,7 @@
       <div class="kv">
         <div class="step ok"   id="st1"><span class="dot">✓</span><span>填寫資料</span></div>
         <div class="step now"  id="st2"><span class="dot">2</span><span>送出申請</span></div>
-        <div class="step todo" id="st3"><span class="dot">3</span><span>軒徹核准</span></div>
+        <div class="step todo" id="st3"><span class="dot">3</span><span>管理員核准</span></div>
         <div class="step todo" id="st4"><span class="dot">4</span><span>開通叫貨</span></div>
       </div>
 
@@ -195,11 +195,11 @@ function toWait(a, sent){
   if (sent) {
     $("st2").className = "step ok";  $("st2").firstChild.textContent = "✓";
     $("st3").className = "step now"; $("st3").firstChild.textContent = "3";
-    $("waitBody").textContent = "你的申請已經送出，等軒徹核准。";
+    $("waitBody").textContent = "你的申請已經送出，等管理員核准。";
     $("waitFoot").textContent = "核准之後機器人會在聊天室通知你，那時候按「叫貨」就能用了。";
     $("manualBox").style.display = "none";
   } else {
-    $("waitBody").textContent = "資料填好了，還差最後一步才會送到軒徹那邊。";
+    $("waitBody").textContent = "資料填好了，還差最後一步才會送到管理員那邊。";
     $("waitFoot").textContent = "";
     $("manualBox").style.display = "block";
   }
