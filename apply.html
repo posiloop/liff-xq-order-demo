@@ -41,6 +41,19 @@
   .done h2{margin:10px 0 6px;font-size:18px}
   .screen{display:none}
   .screen.on{display:block}
+  .kv{margin:14px 0 0;border-top:1px solid var(--line);padding-top:12px;text-align:left}
+  .kv div{display:flex;justify-content:space-between;gap:12px;font-size:14px;padding:3px 0}
+  .kv span:first-child{color:var(--muted)}
+  .kv span:last-child{font-weight:600}
+  .step{display:flex;align-items:center;gap:8px;font-size:14px;padding:6px 0;text-align:left}
+  .step .dot{flex:0 0 18px;height:18px;border-radius:50%;background:var(--line);
+             color:#fff;font-size:11px;line-height:18px;text-align:center;font-weight:700}
+  .step.ok .dot{background:var(--ok)}
+  .step.now .dot{background:var(--brand)}
+  .step.now{font-weight:700}
+  .step.todo{color:var(--muted)}
+  .warn{background:var(--brand-soft);border:1px solid #f0d9a8;border-radius:10px;
+        padding:12px;font-size:13.5px;margin-top:14px;text-align:left}
 </style>
 </head>
 <body>
@@ -50,7 +63,7 @@
 </header>
 
 <div class="demo-bar" id="demoBar">
-  <b>尚未接上後端</b>·送出只會顯示你填的內容，不會寫進系統
+  <b>這頁還沒掛進 LINE</b>·送出時要回聊天室按一下，掛好之後就會自動送
 </div>
 
 <main>
@@ -87,6 +100,40 @@
     </div>
   </section>
 
+  <!-- 等待認證：送出之後停在這一頁（軒徹 2026-09-16 01:05 msg 24485 要的） -->
+  <section class="screen" id="scrWait">
+    <div class="card done">
+      <div class="big" id="waitIcon">🕒</div>
+      <h2 id="waitTitle">等待認證</h2>
+      <p class="note" id="waitBody">你的申請已經送出，等軒徹核准。</p>
+
+      <div class="kv">
+        <div><span>店鋪</span><span id="kvStore">—</span></div>
+        <div><span>姓名</span><span id="kvName">—</span></div>
+        <div><span>電話</span><span id="kvPhone">—</span></div>
+      </div>
+
+      <div class="kv">
+        <div class="step ok"   id="st1"><span class="dot">✓</span><span>填寫資料</span></div>
+        <div class="step now"  id="st2"><span class="dot">2</span><span>送出申請</span></div>
+        <div class="step todo" id="st3"><span class="dot">3</span><span>軒徹核准</span></div>
+        <div class="step todo" id="st4"><span class="dot">4</span><span>開通叫貨</span></div>
+      </div>
+
+      <!-- 沒有 LIFF 時才會出現：要使用者回聊天室按一下送出 -->
+      <div id="manualBox" style="display:none">
+        <div class="warn">
+          <b>還差最後一步。</b>按下面這顆會跳回聊天室，訊息已經幫你打好了，<b>你只要按送出</b>。
+          （等這個申請頁正式掛進 LINE 之後，這一步就會自動完成。）
+        </div>
+        <a class="primary" id="manualBtn" href="#"
+           style="display:block;text-align:center;text-decoration:none">回聊天室送出</a>
+      </div>
+
+      <div class="note" id="waitFoot" style="margin-top:14px"></div>
+    </div>
+  </section>
+
   <section class="screen" id="scrDone">
     <div class="card done">
       <div class="big">✅</div>
@@ -97,72 +144,101 @@
 </main>
 
 <script>
-// 🔴 後端還沒接：部署好 Apps Script 之後把 /exec 網址填進來，demo-bar 會自己消失。
-//    空字串＝送出只回顯，不會假裝寫進系統（不要改成「已送出申請」那種假成功）。
-var ENDPOINT = "";
+// ─── 送出管道：不靠 Apps Script，把申請變成一則 LINE 訊息丟給機器人 ─────────────
+// 🔴 為什麼不是 fetch 後端：本頁是 GitHub Pages（https 靜態），沒有自己的後端；
+//    Apps Script 要軒徹本人部署才有 /exec，卡在他手上。改走 LINE 這條就不依賴他。
+// 兩條路，能走哪條看「這頁是不是真的掛成 LIFF」：
+//   A 真 LIFF（LIFF_ID 有填且 init 成功）→ liff.sendMessages() 直接代送，使用者不用多按。
+//   B 沒 LIFF（現況）→ 跳 LINE 官方帳號深連結，訊息預先打好，使用者按一下送出。
+// ⇒ B 現在就能用，A 等拿到 LIFF ID 填進去就自動升級，**頁面其他地方一行都不用改**。
+var LIFF_ID  = "";                 // ← 拿到 LIFF ID 填這裡（`liff.line.me/` 後面那串），其餘不用動
+var BOT_ID   = "@040xpvza";        // 叫貨機器人（GET /v2/bot/info 實查：displayName「叫貨機器人」）
+var ENDPOINT = "";                 // 保留：真有後端時優先走它（目前空＝不走）
 
 var $ = function(id){ return document.getElementById(id); };
 var lineUserId = "";
+var liffReady  = false;
 
-try {
-  // LIFF ID 仍是雛形佔位值；不在 LINE 裡打開也要能用，所以失敗一律吞掉繼續。
-  if (window.liff) {
-    liff.init({ liffId: "0000000000-00000000" })
-      .then(function(){ return liff.getProfile(); })
-      .then(function(p){ lineUserId = p.userId || ""; })
-      .catch(function(){});
-  }
-} catch (e) {}
-
-if (ENDPOINT) { $("demoBar").style.display = "none"; }
+if (LIFF_ID && window.liff) {
+  try {
+    liff.init({ liffId: LIFF_ID })
+      .then(function(){
+        liffReady = true;
+        $("demoBar").style.display = "none";
+        return liff.isLoggedIn() ? liff.getProfile() : null;
+      })
+      .then(function(p){ if (p) lineUserId = p.userId || ""; })
+      .catch(function(){ liffReady = false; });   // 失敗就退回 B，不擋使用者
+  } catch (e) { liffReady = false; }
+}
 
 function show(id){
   var xs = document.querySelectorAll(".screen");
   for (var i = 0; i < xs.length; i++) xs[i].classList.remove("on");
   $(id).classList.add("on");
+  window.scrollTo(0, 0);
+}
+
+// 機器人端靠開頭這行認出申請單（xq_line_adapter.APPLY_INTAKE_HEAD）。
+// 排版成人看得懂的樣子：軒徹在聊天室裡會直接看到這則。
+function applyText(a){
+  return "【申請認證】\n"
+       + "店鋪：" + a.storeName + "(" + a.storeNo + ")\n"
+       + "姓名：" + a.name + "\n"
+       + "電話：" + a.phone;
+}
+
+function toWait(a, sent){
+  $("kvStore").textContent = a.storeName;
+  $("kvName").textContent  = a.name;
+  $("kvPhone").textContent = a.phone;
+  if (sent) {
+    $("st2").className = "step ok";  $("st2").firstChild.textContent = "✓";
+    $("st3").className = "step now"; $("st3").firstChild.textContent = "3";
+    $("waitBody").textContent = "你的申請已經送出，等軒徹核准。";
+    $("waitFoot").textContent = "核准之後機器人會在聊天室通知你，那時候按「叫貨」就能用了。";
+    $("manualBox").style.display = "none";
+  } else {
+    $("waitBody").textContent = "資料填好了，還差最後一步才會送到軒徹那邊。";
+    $("waitFoot").textContent = "";
+    $("manualBox").style.display = "block";
+  }
+  show("scrWait");
 }
 
 $("submitBtn").onclick = function(){
-  var storeSel = $("store");
-  var storeNo  = storeSel.value;
+  var storeSel  = $("store");
+  var storeNo   = storeSel.value;
   var storeName = storeNo ? storeSel.options[storeSel.selectedIndex].text : "";
   var name  = $("name").value.trim();
   var phone = $("phone").value.trim().replace(/[^0-9]/g, "");
-  var err = $("err");
 
-  if (!storeNo)              return fail("請先選擇店鋪。");
-  if (name.length < 2)       return fail("請填姓名。");
-  if (phone.length < 8)      return fail("電話看起來不完整，請再確認。");
-  err.style.display = "none";
+  if (!storeNo)        return fail("請先選擇店鋪。");
+  if (name.length < 2) return fail("請填姓名。");
+  if (phone.length < 8) return fail("電話看起來不完整，請再確認。");
+  $("err").style.display = "none";
 
-  var payload = {
-    action: "apply",
-    store_no: storeNo, store_name: storeName,
-    name: name, phone: phone, line_user_id: lineUserId
-  };
+  var a = { storeNo: storeNo, storeName: storeName, name: name, phone: phone };
+  var text = applyText(a);
 
-  if (!ENDPOINT) {
-    $("doneTitle").textContent = "還沒接上系統";
-    $("doneBody").textContent =
-      "你填的是：" + storeName + "／" + name + "／" + phone +
-      "。目前送出不會寫進任何地方，請直接找軒徹開通。";
-    show("scrDone");
+  // A：真 LIFF —— 代送，然後停在「等待認證」頁
+  if (liffReady && liff.isApiAvailable && liff.isApiAvailable("sendMessages")) {
+    $("submitBtn").disabled = true;
+    liff.sendMessages([{ type: "text", text: text }])
+      .then(function(){ toWait(a, true); })
+      .catch(function(){
+        $("submitBtn").disabled = false;
+        toWait(a, false);          // 代送失敗也不卡住，退回 B
+      });
     return;
   }
 
-  $("submitBtn").disabled = true;
-  fetch(ENDPOINT, { method: "POST", body: JSON.stringify(payload) })
-    .then(function(r){ return r.json(); })
-    .then(function(){
-      $("doneTitle").textContent = "已送出";
-      $("doneBody").textContent =
-        storeName + "／" + name + "／" + phone + "，等軒徹審核通過後就能叫貨。";
-      show("scrDone");
-    })
-    .catch(function(){
-      $("submitBtn").disabled = false;
-      fail("送出失敗，請再試一次，或直接找軒徹。");
-    });
+  // B：沒 LIFF —— 先進「等待認證」頁，按鈕（真的是 <a>）帶他回聊天室按送出
+  // ⚠️ BOT_ID 不可 encodeURIComponent：`@` 會變 `%40`，那是路徑片段不是查詢值。
+  //    只有後面的訊息本文要編碼。
+  $("manualBtn").href = "https://line.me/R/oaMessage/" + BOT_ID
+                      + "/?" + encodeURIComponent(text);
+  toWait(a, false);
 };
 
 function fail(m){ var e = $("err"); e.textContent = m; e.style.display = "block"; }
