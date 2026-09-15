@@ -338,8 +338,10 @@ render(); setRole("store");
     })
     .catch(()=>alertBar("連不到後端（下面是假品項，不要用）"));
 })();
+/* 單號格式跟既有的一樣：店號 + 西元年後兩碼 + MM + DD（實例 2001260916）。
+   ⛔ 不要用民國年 —— 那會產出 20011150916，跟系統裡任何一張單都對不起來。 */
 function todayNo(){ const d=new Date();
-  return String(d.getFullYear()-1911)+String(d.getMonth()+1).padStart(2,"0")
+  return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,"0")
         +String(d.getDate()).padStart(2,"0"); }
 
 /* ───────── LIFF：有就用，沒有就當一般網頁跑（雛形要能直接點開看） ─────────
