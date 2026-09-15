@@ -40,8 +40,15 @@
   tr:last-child td{border-bottom:0}
   .name{font-weight:600}
   .spec{color:var(--muted);font-size:12.5px}
-  input[type=number]{width:100%;max-width:78px;padding:8px;border:1.5px solid var(--line);border-radius:8px;
-                     font-size:16px;text-align:right;background:#fff}
+  input[type=number]{width:100%;max-width:46px;padding:8px 4px;border:1.5px solid var(--line);border-radius:8px;
+                     font-size:16px;text-align:center;background:#fff}
+  /* 數量欄＝〔−〕〔輸入〕〔＋〕。加減一次跳一個 MOQ 倍數（MOQ 欄已拿掉，倍數規則改用按鈕表達）。
+     🔴 flex 的子元素預設會被壓縮，手機上按鈕會縮成一條 —— 三個都要 flex:0 0 auto。 */
+  .qtybox{display:flex;align-items:center;justify-content:flex-end;gap:4px}
+  .qtybox input[type=number]{flex:0 0 auto}
+  .stp{flex:0 0 auto;width:28px;height:36px;padding:0;border:1.5px solid var(--line);border-radius:8px;
+       background:#fff;color:var(--ink);font-size:18px;line-height:1;cursor:pointer}
+  .stp:active{background:var(--brand-soft);border-color:var(--brand)}
   input[type=number]:focus{outline:0;border-color:var(--brand);background:var(--brand-soft)}
   .moqbad{border-color:var(--bad)!important;background:#fef4f2!important}
   .rowmsg{color:var(--bad);font-size:12px;display:none}
@@ -97,19 +104,18 @@
   <main>
     <div class="card">
       <div class="meta">
-        <span>訂購日 <b id="dOrder">—</b></span>
-        <span>預計到貨 <b id="dArrive">—</b></span>
+        <span>叫貨日 <b id="dOrder">—</b></span>
+        <span>最晚到貨日 <b id="dArrive">—</b></span>
         <span>單號 <b id="dNo">—</b></span>
       </div>
-      <div class="note">只要填「叫貨數量」，其他都是系統帶出來的。數量要是 MOQ 的倍數。</div>
     </div>
     <table>
       <thead><tr>
-        <th style="width:42%">品項</th><th class="num" style="width:13%">MOQ</th><th class="num" style="width:22%">數量</th><th class="num" style="width:23%">小計</th>
+        <th style="width:44%">品項</th><th class="num" style="width:34%">數量</th><th class="num" style="width:22%">小計</th>
       </tr></thead>
       <tbody id="tb"></tbody>
     </table>
-    <div class="note" style="margin-top:10px">※ 以上為<b>範例品項</b>，正式版會帶出該店真正的可叫品項。</div>
+    <div class="note" id="demoNote" style="margin-top:10px">※ 以上為<b>範例品項</b>，正式版會帶出該店真正的可叫品項。</div>
   </main>
   <div class="foot">
     <div class="sum"><span>合計</span><span class="big">$<span id="total">0</span></span></div>
@@ -223,6 +229,32 @@ let qty = new Array(ITEMS.length).fill(0);
 function fmt(n){ return (Math.round(n*100)/100).toLocaleString("en-US"); }
 function today(){ const d=new Date(); return (d.getMonth()+1)+"/"+d.getDate(); }
 function plusDays(k){ const d=new Date(); d.setDate(d.getDate()+k); return (d.getMonth()+1)+"/"+d.getDate(); }
+
+/* ───────── 「隔周五」→ 真的日期（軒徹 2026-09-16 02:30 msg 24529）─────────
+   ERP 那欄存的是相對講法（隔周五／本週三…），店長看到要的是「幾月幾號」。
+   隔週＝下週（本週一 +7 天那一週）。
+   🔴 轉不出來就**原字照顯示**，⛔ 不可自己編一個日期 —— 編出來的日期長得跟真的一樣，
+      錯了沒有人看得出來，比直接顯示「隔周五」危險得多。 */
+const WD = {"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"日":7,"天":7};
+function dueInfo(txt){
+  const raw = String(txt||"").trim();
+  if(!raw) return {label:"", t:null};
+  const m = /^(本|這|下|隔)\s*[週周]\s*([一二三四五六日天])$/.exec(raw);
+  if(!m) return {label:raw, t:null};          // 認不得就照原字，不猜
+  const now = new Date();
+  // 本週一（把週日當一週的最後一天）
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay()+6)%7));
+  d.setDate(d.getDate() + ((m[1]==="本"||m[1]==="這") ? 0 : 7) + (WD[m[2]]-1));
+  return {label:(d.getMonth()+1)+"/"+d.getDate(), t:d.getTime()};
+}
+/* 表頭「最晚到貨日」＝所有品項裡最晚的那一個到貨日，跟每列用同一條規則算出來。
+   一個品項都轉不出日期時（例如雛形假品項沒有 due）才退回 +7 天。 */
+function refreshArrive(){
+  let best=null, lab="";
+  ITEMS.forEach(it=>{ const di=dueInfo(it.due);
+    if(di.t!==null && (best===null || di.t>best)){ best=di.t; lab=di.label; } });
+  document.getElementById("dArrive").textContent = lab || plusDays(7);
+}
 /* 🔴 金額算法跟後端與叫貨表同一條：(數量 ÷ MOQ) × 成箱價。
    ⛔ 不可寫成 數量 × 單價 —— 那是雛形的算法，跟表上的公式對不起來。 */
 function amountOf(i,v){ const it=ITEMS[i];
@@ -231,19 +263,39 @@ function amountOf(i,v){ const it=ITEMS[i];
 function render(){
   const tb=document.getElementById("tb"); tb.innerHTML="";
   ITEMS.forEach((it,i)=>{
-    const unitTxt = (it.moq && it.box) ? ("$"+fmt(it.box)+"/"+it.moq+it.u) : "";
+    /* 規格寫法（軒徹 msg 24529 指定）：每包幾隻 * 每箱幾包。例：10隻/包*8/箱、2隻/包*36/箱。
+       成箱價同步改成 /箱 —— 舊寫法 $2,080/8包 跟前面的「*8/箱」是同一件事講兩次。 */
+    const specTxt = it.s + (it.moq ? "*"+it.moq+"/箱" : "");
+    const priceTxt = it.box ? ("$"+fmt(it.box)+"/箱") : "";
+    const dueTxt = dueInfo(it.due).label;
     const tr=document.createElement("tr");
     tr.innerHTML =
       '<td><div class="name">'+it.n+'</div>'+
-        '<div class="spec">'+it.s+(unitTxt?' · '+unitTxt:'')+(it.due?' · '+it.due:'')+'</div>'+
+        '<div class="spec">'+specTxt+(priceTxt?' · '+priceTxt:'')+(dueTxt?' · '+dueTxt:'')+'</div>'+
         '<div class="rowmsg" id="msg'+i+'">要是 '+it.moq+' 的倍數</div></td>'+
-      '<td class="num">'+it.moq+'</td>'+
-      '<td class="num"><input type="number" min="0" step="1" inputmode="numeric" '+
-        'id="q'+i+'" value="" placeholder="0" oninput="chg('+i+')"></td>'+
+      '<td class="num"><div class="qtybox">'+
+        '<button type="button" class="stp" onclick="step('+i+',-1)" aria-label="減一箱">−</button>'+
+        '<input type="number" min="0" step="'+(it.moq||1)+'" inputmode="numeric" '+
+          'id="q'+i+'" value="" placeholder="0" oninput="chg('+i+')">'+
+        '<button type="button" class="stp" onclick="step('+i+',1)" aria-label="加一箱">+</button>'+
+      '</div></td>'+
       '<td class="num" id="sub'+i+'">—</td>';
     tb.appendChild(tr);
   });
+  refreshArrive();
   recalc();
+}
+/* 加減一次跳一個 MOQ 倍數。
+   🔴 手打過非倍數（例如 MOQ 8 打成 5）時，先對齊到倍數再加減，
+      ⛔ 不可在錯的基準上疊加 —— 那會得到 13、21 這種永遠過不了檢查的數字。 */
+function step(i,dir){
+  const m = ITEMS[i].moq || 1;
+  const el = document.getElementById("q"+i);
+  let v = parseInt(el.value||"0",10)||0;
+  v = dir>0 ? (Math.floor(v/m)+1)*m : (Math.ceil(v/m)-1)*m;
+  if(v<0) v=0;
+  el.value = v>0 ? v : "";
+  chg(i);
 }
 function chg(i){
   const el=document.getElementById("q"+i);
@@ -306,7 +358,7 @@ function setRole(r){
 document.getElementById("roleSel").onchange = e => setRole(e.target.value);
 
 document.getElementById("dOrder").textContent = today();
-document.getElementById("dArrive").textContent = plusDays(7);
+/* dArrive 由 refreshArrive() 在 render() 裡算（每列同一條規則），這裡不再各算一次 */
 const no = "2001" + new Date().toISOString().slice(2,10).replace(/-/g,"");
 document.getElementById("dNo").textContent = no;
 document.getElementById("dNo2").textContent = no;
@@ -331,6 +383,8 @@ render(); setRole("store");
                                 u:it.unit, box:it.box_price, due:it.due}));
       qty = new Array(ITEMS.length).fill(0);
       document.getElementById("hdrSub").textContent = j.store_name;
+      /* 這行是雛形留下的：真品項載進來之後它就變成一句假話，要收掉。 */
+      document.getElementById("demoNote").style.display="none";
       document.getElementById("dNo").textContent = Q_STORE + todayNo();
       document.getElementById("dNo2").textContent = Q_STORE + todayNo();
       bar.innerHTML='🧪 <b>沙盒</b>·品項讀自 ERP 副本，送出寫進<b>副本</b>叫貨表，正式表不受影響';
