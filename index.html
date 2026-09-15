@@ -194,8 +194,21 @@
 </section>
 
 <script>
-/* ───────── 雛形用的假資料。正式版這裡改成讀 ERP 的可叫品項。 ───────── */
-const ITEMS = [
+/* ───────── 品項來源 ─────────────────────────────────────────────────────
+   🔴 沙盒（軒徹 2026-09-16 02:09 msg 24520）：讀的是**副本 ERP** 產的快照，
+      送出寫的是**副本叫貨表**。正式 ERP 與正式叫貨表都不碰。
+   🔴 網址沒帶身分（u/s）時**不抓真資料、也不假裝有資料** —— 退回雛形假品項
+      並在橫幅講明。⛔ 不可讓「沒帶身分」長得跟「這家店沒品項」一樣。 */
+var ENDPOINT = "https://hook.aemassinc.net/xq";
+function qs(k){
+  var m = new RegExp("[?&]"+k+"=([^&]*)").exec(window.location.search);
+  return m ? decodeURIComponent(m[1].replace(/\+/g," ")) : "";
+}
+const Q_UID=qs("u"), Q_SIG=qs("s"), Q_STORE=qs("store");
+const LIVE = !!(Q_UID && Q_SIG && Q_STORE);
+
+/* 雛形假品項：只在沒帶身分時才會用到（p＝單價，僅雛形用） */
+const DEMO_ITEMS = [
   {n:"土雞肉丁", s:"1Kg/包",  moq:12, u:"包", p:62},
   {n:"熟筍絲",   s:"600g/包", moq:20, u:"包", p:59},
   {n:"T6骨腿(2入)", s:"1Kg/包", moq:36, u:"包", p:93},
@@ -203,19 +216,26 @@ const ITEMS = [
   {n:"雞翅",     s:"1.2Kg/包", moq:8,  u:"包", p:200},
   {n:"飯醬",     s:"22Kg/桶",  moq:1,  u:"桶", p:2200},
 ];
-const qty = new Array(ITEMS.length).fill(0);
+let ITEMS = DEMO_ITEMS.map(x=>({code:"", n:x.n, s:x.s, moq:x.moq, u:x.u,
+                                box:x.p*x.moq, due:""}));
+let qty = new Array(ITEMS.length).fill(0);
 
-function fmt(n){ return n.toLocaleString("en-US"); }
+function fmt(n){ return (Math.round(n*100)/100).toLocaleString("en-US"); }
 function today(){ const d=new Date(); return (d.getMonth()+1)+"/"+d.getDate(); }
 function plusDays(k){ const d=new Date(); d.setDate(d.getDate()+k); return (d.getMonth()+1)+"/"+d.getDate(); }
+/* 🔴 金額算法跟後端與叫貨表同一條：(數量 ÷ MOQ) × 成箱價。
+   ⛔ 不可寫成 數量 × 單價 —— 那是雛形的算法，跟表上的公式對不起來。 */
+function amountOf(i,v){ const it=ITEMS[i];
+  return (it.moq && it.box) ? (v/it.moq)*it.box : 0; }
 
 function render(){
   const tb=document.getElementById("tb"); tb.innerHTML="";
   ITEMS.forEach((it,i)=>{
+    const unitTxt = (it.moq && it.box) ? ("$"+fmt(it.box)+"/"+it.moq+it.u) : "";
     const tr=document.createElement("tr");
     tr.innerHTML =
       '<td><div class="name">'+it.n+'</div>'+
-        '<div class="spec">'+it.s+' · $'+it.p+'/'+it.u+'</div>'+
+        '<div class="spec">'+it.s+(unitTxt?' · '+unitTxt:'')+(it.due?' · '+it.due:'')+'</div>'+
         '<div class="rowmsg" id="msg'+i+'">要是 '+it.moq+' 的倍數</div></td>'+
       '<td class="num">'+it.moq+'</td>'+
       '<td class="num"><input type="number" min="0" step="1" inputmode="numeric" '+
@@ -229,26 +249,52 @@ function chg(i){
   const el=document.getElementById("q"+i);
   const v=parseInt(el.value||"0",10)||0;
   qty[i]=v;
-  const bad = v>0 && v % ITEMS[i].moq !== 0;
+  const bad = v>0 && ITEMS[i].moq && v % ITEMS[i].moq !== 0;
   el.classList.toggle("moqbad",bad);
   document.getElementById("msg"+i).classList.toggle("show",bad);
-  document.getElementById("sub"+i).textContent = v>0 ? "$"+fmt(v*ITEMS[i].p) : "—";
+  document.getElementById("sub"+i).textContent = v>0 ? "$"+fmt(amountOf(i,v)) : "—";
   recalc();
 }
 function recalc(){
   let t=0,ok=false,bad=false;
-  ITEMS.forEach((it,i)=>{ if(qty[i]>0){ ok=true; t+=qty[i]*it.p;
-                                        if(qty[i]%it.moq!==0) bad=true; } });
+  ITEMS.forEach((it,i)=>{ if(qty[i]>0){ ok=true; t+=amountOf(i,qty[i]);
+                                        if(it.moq && qty[i]%it.moq!==0) bad=true; } });
   document.getElementById("total").textContent=fmt(t);
   document.getElementById("total2").textContent=fmt(t);
   document.getElementById("submitBtn").disabled = !ok || bad;
 }
+
 function show(id){
   document.querySelectorAll(".screen").forEach(s=>s.classList.remove("on"));
   document.getElementById(id).classList.add("on");
   window.scrollTo(0,0);
 }
-document.getElementById("submitBtn").onclick=()=>show("scrDone");
+/* ───────── 送出 ─────────────────────────────────────────────────────────
+   LIVE：POST /xq/order → 寫**副本**叫貨表。失敗一律把後端原話印出來，
+         ⛔ 不可回到「已送出」畫面 —— 那會讓店長以為單下了。
+   雛形：維持原本行為（只切畫面），並在按鈕旁講明它不會進任何系統。 */
+document.getElementById("submitBtn").onclick=function(){
+  if(!LIVE){ show("scrDone"); return; }
+  const payload = {};
+  ITEMS.forEach((it,i)=>{ if(qty[i]>0) payload[it.code]=qty[i]; });
+  const btn=document.getElementById("submitBtn");
+  btn.disabled=true; btn.textContent="送出中…";
+  fetch(ENDPOINT+"/order",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({u:Q_UID,s:Q_SIG,store:Q_STORE,qty:payload})})
+    .then(r=>r.json().catch(()=>({ok:false,error:"http-"+r.status})))
+    .then(j=>{
+      btn.disabled=false; btn.textContent="填寫完畢，送出";
+      if(j&&j.ok){ show("scrDone"); return; }
+      alertBar("送不出去："+((j&&j.error)||"未知原因"));
+    })
+    .catch(()=>{ btn.disabled=false; btn.textContent="填寫完畢，送出";
+                 alertBar("連不到後端，單沒有送出去。"); });
+};
+function alertBar(msg){
+  const b=document.getElementById("demoBar");
+  b.style.display="block"; b.innerHTML="<b>"+msg+"</b>";
+  window.scrollTo(0,0);
+}
 document.getElementById("gearBtn").onclick=()=>show("scrAdmin");
 
 function setRole(r){
@@ -265,6 +311,36 @@ const no = "2001" + new Date().toISOString().slice(2,10).replace(/-/g,"");
 document.getElementById("dNo").textContent = no;
 document.getElementById("dNo2").textContent = no;
 render(); setRole("store");
+
+/* ───────── 開機：帶了身分就去拿該店真品項 ───────── */
+(function boot(){
+  const bar=document.getElementById("demoBar");
+  if(!LIVE){
+    bar.innerHTML='<b>雛形展示</b>·這個連結沒帶身分，下面是<b>假品項</b>、送出不會進任何系統';
+    return;
+  }
+  document.getElementById("roleSel").style.display="none";
+  bar.innerHTML='<b>載入該店品項中…</b>';
+  fetch(ENDPOINT+"/items?store="+encodeURIComponent(Q_STORE)
+        +"&u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG))
+    .then(r=>r.json().catch(()=>({ok:false,error:"http-"+r.status})))
+    .then(j=>{
+      if(!j||!j.ok){ alertBar("拿不到品項："+((j&&j.error)||"未知原因")
+                              +"（下面是假品項，不要用）"); return; }
+      ITEMS = j.items.map(it=>({code:it.code, n:it.name, s:it.spec, moq:it.moq,
+                                u:it.unit, box:it.box_price, due:it.due}));
+      qty = new Array(ITEMS.length).fill(0);
+      document.getElementById("hdrSub").textContent = j.store_name;
+      document.getElementById("dNo").textContent = Q_STORE + todayNo();
+      document.getElementById("dNo2").textContent = Q_STORE + todayNo();
+      bar.innerHTML='🧪 <b>沙盒</b>·品項讀自 ERP 副本，送出寫進<b>副本</b>叫貨表，正式表不受影響';
+      render();
+    })
+    .catch(()=>alertBar("連不到後端（下面是假品項，不要用）"));
+})();
+function todayNo(){ const d=new Date();
+  return String(d.getFullYear()-1911)+String(d.getMonth()+1).padStart(2,"0")
+        +String(d.getDate()).padStart(2,"0"); }
 
 /* ───────── LIFF：有就用，沒有就當一般網頁跑（雛形要能直接點開看） ─────────
    正式版才會綁真的 LIFF ID，並用 liff.getProfile() 的 userId 決定這個人是哪一間店。 */
