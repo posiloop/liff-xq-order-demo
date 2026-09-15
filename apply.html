@@ -63,7 +63,7 @@
 </header>
 
 <div class="demo-bar" id="demoBar">
-  <b>這頁還沒掛進 LINE</b>·送出時要回聊天室按一下，掛好之後就會自動送
+  <span id="bannerTxt"><b>這頁還沒掛進 LINE</b>·送出時要回聊天室按一下，掛好之後就會自動送</span>
 </div>
 
 <main>
@@ -166,6 +166,15 @@ function qs(k){
   return m ? decodeURIComponent(m[1].replace(/\+/g, " ")) : "";
 }
 var Q_UID = qs("u"), Q_SIG = qs("s");
+// 🔴 橫幅要說**這一次**的實況，不是說這個功能的一般狀況。
+//    舊文案在帶了身分時是錯的，而使用者只會看到橫幅，不會去看我在群組講了什麼。
+(function(){
+  var b = document.getElementById("bannerTxt");
+  if (!b) return;
+  b.innerHTML = (Q_UID && Q_SIG)
+    ? "<b>已認出你是誰</b>·按送出就直接送到管理員，不用回聊天室"
+    : "<b>這個連結沒有帶身分</b>·多半是從舊訊息點進來的。回 LINE 重按一次「叫貨」再點「申請認證」就不用回聊天室了";
+})();
 
 var $ = function(id){ return document.getElementById(id); };
 var lineUserId = "";
@@ -276,7 +285,8 @@ $("submitBtn").onclick = function(){
   }
 
   // B：沒 LIFF、網址也沒帶身分 —— 退回「回聊天室按送出」那條
-  manualFallback(a, text, "");
+  //    🔴 原因一定要寫出來：不寫的話畫面跟「後端掛了」長得一模一樣，人會回報錯的症狀。
+  manualFallback(a, text, "這個連結沒帶身分，回 LINE 重按一次「叫貨」就不用這步");
 };
 
 function manualFallback(a, text, why){
