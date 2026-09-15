@@ -40,6 +40,9 @@
   tr:last-child td{border-bottom:0}
   .name{font-weight:600}
   .spec{color:var(--muted);font-size:12.5px}
+  /* 每一小段自己不斷行，⛔ 不要讓「$2,080/箱」被拆成「$2,080/」＋「箱」——
+     拆開之後那個「箱」會貼在下一行開頭，看起來像另一個欄位。 */
+  .spec span{white-space:nowrap}
   input[type=number]{width:100%;max-width:46px;padding:8px 4px;border:1.5px solid var(--line);border-radius:8px;
                      font-size:16px;text-align:center;background:#fff}
   /* 數量欄＝〔−〕〔輸入〕〔＋〕。加減一次跳一個 MOQ 倍數（MOQ 欄已拿掉，倍數規則改用按鈕表達）。
@@ -271,7 +274,9 @@ function render(){
     const tr=document.createElement("tr");
     tr.innerHTML =
       '<td><div class="name">'+it.n+'</div>'+
-        '<div class="spec">'+specTxt+(priceTxt?' · '+priceTxt:'')+(dueTxt?' · '+dueTxt:'')+'</div>'+
+        '<div class="spec"><span>'+specTxt+'</span>'+
+          (priceTxt?' · <span>'+priceTxt+'</span>':'')+
+          (dueTxt?' · <span>'+dueTxt+'</span>':'')+'</div>'+
         '<div class="rowmsg" id="msg'+i+'">要是 '+it.moq+' 的倍數</div></td>'+
       '<td class="num"><div class="qtybox">'+
         '<button type="button" class="stp" onclick="step('+i+',-1)" aria-label="減一箱">−</button>'+
