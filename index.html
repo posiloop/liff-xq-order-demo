@@ -11,6 +11,12 @@
     --brand:#d97706; --brand-soft:#fff7e8; --ok:#0f7b3f; --bad:#b42318;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  /* 🔴 連點加減太快時整頁會放大（軒徹 2026-09-16 02:47 msg 24534 回報）。
+     根因是手機瀏覽器的「連點兩下＝放大」，不是我的程式做了什麼。
+     touch-action:manipulation ＝ 這顆元素上的連點不要進放大手勢，一般捲動縮放不受影響。
+     ⛔ 不要改用 maximum-scale／user-scalable=no —— iOS 10 起 Safari 直接忽略那兩個，
+        而且那是把**整頁**的縮放關掉，會害看不清楚的人沒辦法自己放大。 */
+  button,.stp,input,select{touch-action:manipulation}
   /* 🔴 手機上任何一欄被切掉都很難發現（截圖才看得到）。這兩行是硬防線：
      頁面永遠不准比視窗寬，表格改固定版面、欄寬自己指定。 */
   html,body{max-width:100%;overflow-x:hidden}
