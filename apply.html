@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>享奇雞 叫貨 · 申請認證</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root{
+    --bg:#f5f5f3; --card:#fff; --line:#e0ddd8; --ink:#1c1c1c; --muted:#6b6b6b;
+    --brand:#d97706; --brand-soft:#fff7e8; --ok:#0f7b3f; --bad:#b42318;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{max-width:100%;overflow-x:hidden}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",system-ui,sans-serif;
+       font-size:16px;line-height:1.55;padding-bottom:40px}
+  header{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;
+         padding:calc(env(safe-area-inset-top) + 12px) 14px 12px}
+  header .t{font-weight:700;font-size:17px}
+  header .t small{display:block;font-weight:400;opacity:.9;font-size:12.5px}
+  .demo-bar{background:#1c1c1c;color:#ffd48a;font-size:12.5px;padding:8px 12px;
+            text-align:center;line-height:1.5}
+  .demo-bar b{color:#fff}
+  main{padding:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+        padding:14px;margin-bottom:12px}
+  .h3{font-weight:700;font-size:15px;margin:0 0 8px}
+  label{display:block;font-size:13.5px;color:var(--muted);margin:12px 0 4px}
+  label:first-of-type{margin-top:0}
+  select,input{width:100%;padding:11px 12px;font-size:16px;border:1px solid var(--line);
+               border-radius:10px;background:#fff;color:var(--ink);font-family:inherit}
+  select:focus,input:focus{outline:2px solid var(--brand);outline-offset:-1px}
+  .note{color:var(--muted);font-size:13px;margin-top:8px}
+  .err{color:var(--bad);font-size:13.5px;margin-top:8px;display:none}
+  button.primary{width:100%;margin-top:16px;padding:14px;font-size:16px;font-weight:700;
+                 color:#fff;background:var(--brand);border:0;border-radius:10px;cursor:pointer}
+  button.primary:disabled{opacity:.5}
+  .done{text-align:center;padding:26px 14px}
+  .done .big{font-size:40px;line-height:1}
+  .done h2{margin:10px 0 6px;font-size:18px}
+  .screen{display:none}
+  .screen.on{display:block}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="t">申請認證<small>享奇雞 叫貨系統</small></div>
+</header>
+
+<div class="demo-bar" id="demoBar">
+  <b>尚未接上後端</b>·送出只會顯示你填的內容，不會寫進系統
+</div>
+
+<main>
+  <section class="screen on" id="scrForm">
+    <div class="card">
+      <p style="margin:0;font-size:14px">
+        你還沒有叫貨權限。填好下面三項送出，由軒徹確認你是哪一間店之後才會開通。
+      </p>
+    </div>
+
+    <div class="card">
+      <label for="store">1. 選擇店鋪</label>
+      <select id="store">
+        <option value="">請選擇</option>
+        <option value="2001">台北江南店</option>
+        <option value="2002">台北瑞湖店</option>
+        <option value="2003">台北昆陽店</option>
+        <option value="2004">新北中和店</option>
+        <option value="2008">汐止中興店</option>
+        <option value="2005">台中逢甲店</option>
+        <option value="2006">台北錦州店</option>
+        <option value="2007">台南永華店</option>
+      </select>
+
+      <label for="name">2. 姓名</label>
+      <input id="name" type="text" autocomplete="name" placeholder="王曉明">
+
+      <label for="phone">3. 電話</label>
+      <input id="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="0912345678">
+
+      <div class="err" id="err"></div>
+      <button class="primary" id="submitBtn">4. 送出申請</button>
+      <div class="note">一個人要綁多間店，就分別申請多次。</div>
+    </div>
+  </section>
+
+  <section class="screen" id="scrDone">
+    <div class="card done">
+      <div class="big">✅</div>
+      <h2 id="doneTitle">已送出</h2>
+      <p class="note" id="doneBody"></p>
+    </div>
+  </section>
+</main>
+
+<script>
+// 🔴 後端還沒接：部署好 Apps Script 之後把 /exec 網址填進來，demo-bar 會自己消失。
+//    空字串＝送出只回顯，不會假裝寫進系統（不要改成「已送出申請」那種假成功）。
+var ENDPOINT = "";
+
+var $ = function(id){ return document.getElementById(id); };
+var lineUserId = "";
+
+try {
+  // LIFF ID 仍是雛形佔位值；不在 LINE 裡打開也要能用，所以失敗一律吞掉繼續。
+  if (window.liff) {
+    liff.init({ liffId: "0000000000-00000000" })
+      .then(function(){ return liff.getProfile(); })
+      .then(function(p){ lineUserId = p.userId || ""; })
+      .catch(function(){});
+  }
+} catch (e) {}
+
+if (ENDPOINT) { $("demoBar").style.display = "none"; }
+
+function show(id){
+  var xs = document.querySelectorAll(".screen");
+  for (var i = 0; i < xs.length; i++) xs[i].classList.remove("on");
+  $(id).classList.add("on");
+}
+
+$("submitBtn").onclick = function(){
+  var storeSel = $("store");
+  var storeNo  = storeSel.value;
+  var storeName = storeNo ? storeSel.options[storeSel.selectedIndex].text : "";
+  var name  = $("name").value.trim();
+  var phone = $("phone").value.trim().replace(/[^0-9]/g, "");
+  var err = $("err");
+
+  if (!storeNo)              return fail("請先選擇店鋪。");
+  if (name.length < 2)       return fail("請填姓名。");
+  if (phone.length < 8)      return fail("電話看起來不完整，請再確認。");
+  err.style.display = "none";
+
+  var payload = {
+    action: "apply",
+    store_no: storeNo, store_name: storeName,
+    name: name, phone: phone, line_user_id: lineUserId
+  };
+
+  if (!ENDPOINT) {
+    $("doneTitle").textContent = "還沒接上系統";
+    $("doneBody").textContent =
+      "你填的是：" + storeName + "／" + name + "／" + phone +
+      "。目前送出不會寫進任何地方，請直接找軒徹開通。";
+    show("scrDone");
+    return;
+  }
+
+  $("submitBtn").disabled = true;
+  fetch(ENDPOINT, { method: "POST", body: JSON.stringify(payload) })
+    .then(function(r){ return r.json(); })
+    .then(function(){
+      $("doneTitle").textContent = "已送出";
+      $("doneBody").textContent =
+        storeName + "／" + name + "／" + phone + "，等軒徹審核通過後就能叫貨。";
+      show("scrDone");
+    })
+    .catch(function(){
+      $("submitBtn").disabled = false;
+      fail("送出失敗，請再試一次，或直接找軒徹。");
+    });
+};
+
+function fail(m){ var e = $("err"); e.textContent = m; e.style.display = "block"; }
+</script>
+</body>
+</html>
