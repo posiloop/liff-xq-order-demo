@@ -68,11 +68,8 @@
 
 <main>
   <section class="screen on" id="scrForm">
-    <div class="card">
-      <p style="margin:0;font-size:14px">
-        你還沒有叫貨權限。填好下面三項送出，由管理員確認你是哪一間店之後才會開通。
-      </p>
-    </div>
+    <!-- 「你還沒有叫貨權限」那張白框拿掉（軒徹 2026-09-16 03:19 msg 24540）：
+         同一件事橫幅已經講過一次，白框是第二次，讀起來像被唸兩遍。 -->
 
     <div class="card">
       <label for="store">1. 選擇店鋪</label>
@@ -172,7 +169,7 @@ var Q_UID = qs("u"), Q_SIG = qs("s");
   var b = document.getElementById("bannerTxt");
   if (!b) return;
   b.innerHTML = (Q_UID && Q_SIG)
-    ? "<b>已認出你是誰</b>·按送出就直接送到管理員，不用回聊天室"
+    ? "叫貨權限未開通，填妥資料送出後等待管理員確認開通"   // 軒徹 msg 24540 指定，逐字照用
     : "<b>這個連結沒有帶身分</b>·多半是從舊訊息點進來的。回 LINE 重按一次「叫貨」再點「申請認證」就不用回聊天室了";
 })();
 
