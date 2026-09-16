@@ -148,7 +148,13 @@
 //   A 真 LIFF（LIFF_ID 有填且 init 成功）→ liff.sendMessages() 直接代送，使用者不用多按。
 //   B 沒 LIFF（現況）→ 跳 LINE 官方帳號深連結，訊息預先打好，使用者按一下送出。
 // ⇒ B 現在就能用，A 等拿到 LIFF ID 填進去就自動升級，**頁面其他地方一行都不用改**。
-var LIFF_ID  = "";                 // ← 拿到 LIFF ID 填這裡（`liff.line.me/` 後面那串），其餘不用動
+// 哲安 2026-09-16 09:49 給（LINE Login channel「叫貨LIFF」底下的 LIFF app「享奇雞申請認證」）。
+// 驗過才填：GET https://liff.line.me/2011621834-9piDKflF → 200 且 og:title=「享奇雞申請認證」；
+//          負控 同 channel 前綴的假 ID 2011621834-00000000 → 404。⇒ 這串是真的、已 Published。
+var LIFF_ID  = "2011621834-9piDKflF";
+// 🔴 光填這裡**不會**讓 A 路生效：liff.init 只有在頁面是從 `liff.line.me/{ID}` 開的才會成功。
+//    若使用者仍從 https://posiloop.github.io/... 直接開，init 失敗 → 靜默退回 B 路（就是原本的行為）。
+//    ⇒ 要真的走 A，LINE 那顆「申請認證」按鈕的 uri 也要改成 liff.line.me（見 xq_line_adapter.APPLY_URL）。
 var BOT_ID   = "@040xpvza";        // 叫貨機器人（GET /v2/bot/info 實查：displayName「叫貨機器人」）
 // 🔴 C 路的後端：機器人自己那條 cloudflared 隧道（本來就通，健康檢查 /xq/health 200）。
 //    ⛔ 這不是 Apps Script，不需要任何人去部署。
