@@ -294,11 +294,14 @@ function render(){
       '<td class="num"><div class="qtybox">'+
         '<button type="button" class="stp" onclick="step('+i+',-1)" aria-label="減一箱">−</button>'+
         '<input type="number" min="0" step="'+(it.moq||1)+'" inputmode="numeric" '+
-          'id="q'+i+'" value="" placeholder="0" oninput="chg('+i+')">'+
+          /* value 要吃 qty[i]：今天已下過的單由 prefill 帶進來，重畫時要把數字留在格子裡。
+             ⛔ 不可寫死 value=""，那會讓預填只存在於變數裡、畫面永遠是 0。 */
+          'id="q'+i+'" value="'+(qty[i]>0?qty[i]:"")+'" placeholder="0" oninput="chg('+i+')">'+
         '<span class="unit">'+(it.u||"")+'</span>'+
         '<button type="button" class="stp" onclick="step('+i+',1)" aria-label="加一箱">+</button>'+
       '</div></td>'+
-      '<td class="num" id="sub'+i+'">—</td>';
+      /* 小計同理：原本只有 chg() 會填，預填進來的列不經過 chg()，會停在「—」。 */
+      '<td class="num" id="sub'+i+'">'+(qty[i]>0?"$"+fmt(amountOf(i,qty[i])):"—")+'</td>';
     tb.appendChild(tr);
   });
   refreshArrive();
@@ -400,7 +403,11 @@ render(); setRole("store");
                               +"（下面是假品項，不要用）"); return; }
       ITEMS = j.items.map(it=>({code:it.code, n:it.name, s:it.spec, moq:it.moq,
                                 u:it.unit, box:it.box_price, due:it.due}));
-      qty = new Array(ITEMS.length).fill(0);
+      /* 今天已經下過的單 → 把數量預填回去（軒徹 2026-09-17 msg24872）。
+         後端回的 prefill 是 {貨號: 數量}；⛔ 用貨號對，不要用順序對 ——
+         品項順序會跟著 ERP 改，拿順序對會把數量填到別的品項那一列而且完全無聲。 */
+      const pre = (j && j.prefill) || {};
+      qty = ITEMS.map(it => Number(pre[it.code]) || 0);
       document.getElementById("hdrSub").textContent = j.store_name;
       /* 這行是雛形留下的：真品項載進來之後它就變成一句假話，要收掉。 */
       document.getElementById("demoNote").style.display="none";
