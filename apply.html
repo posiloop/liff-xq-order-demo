@@ -164,8 +164,19 @@ var ENDPOINT = "https://hook.aemassinc.net/xq/apply";
 // 🔴 這就是「不必等 LIFF ID」的關鍵：這頁的網址是**機器人在回覆某個人的當下**產的，
 //    那一刻它就知道按的人是誰 ⇒ 身分直接寫進 query，附 HMAC 簽章防冒名。
 //    ⛔ 不要把「有沒有 LIFF」跟「送不送得出去」綁在一起——那是 01:26 我判斷錯的地方。
+// 🔴 從 liff.line.me/{ID}?u=..&s=.. 進來時，LINE **不會**把 query 原樣傳過來，
+//    而是包成 `?liff.state=%3Fu%3D..%26s%3D..`（2026-09-16 11:2x 實測：
+//    `curl https://liff.line.me/2011621834-9piDKflF?u=TESTUID&s=TESTSIG` 回的 HTML 裡就是這個形狀）。
+//    SDK 會在 init 之後把它還原，但那是**非同步**的，而 Q_UID／橫幅在 script 載入當下就要讀值
+//    ⇒ 不自己先解一次的話，改走真 LIFF 反而比原本的普通網頁**更糟**：
+//      橫幅會先閃一次「這個連結沒有帶身分」，C 路也可能在還原前就被判成沒身分。
+function rawQuery(){
+  var s = window.location.search || "";
+  var m = /[?&]liff\.state=([^&]*)/.exec(s);
+  return m ? decodeURIComponent(m[1]) : s;   // 解出來是 "?u=..&s=.."，前導 ? 讓下面的 [?&] 命中
+}
 function qs(k){
-  var m = new RegExp("[?&]" + k + "=([^&]*)").exec(window.location.search);
+  var m = new RegExp("[?&]" + k + "=([^&]*)").exec(rawQuery());
   return m ? decodeURIComponent(m[1].replace(/\+/g, " ")) : "";
 }
 var Q_UID = qs("u"), Q_SIG = qs("s");
