@@ -176,8 +176,12 @@ function render(){
   var orders = DATA.orders || [];
   /* 選了店就把店名放頁首；沒選店（看全部）才在每張卡上標店名，不兩邊都寫 */
   var single = !!(DATA.store_no);
+  /* 店名前面掛店號（軒徹 msg25354）。🔴 兩者都從**後端回的那張單**來，
+     ⛔ 不從網址上的 `store` 拼——網址在使用者手上，拼出來的號碼可能根本不是這張單的店。 */
   document.getElementById("title").textContent =
-    "📦 " + (single && DATA.store_name ? DATA.store_name : "進貨");
+    "📦 " + (single && DATA.store_name
+             ? (DATA.store_no ? DATA.store_no + " " : "") + DATA.store_name
+             : "進貨");
   document.getElementById("sub").textContent =
     orders.length ? (orders.length + " 張單待進貨・" + DATA.count + " 項")
                   : "目前沒有待進貨的單";
@@ -202,7 +206,7 @@ function render(){
       +    '<span class="cal"><span class="m">'+esc(cal.m)+'</span>'
       +      '<span class="d">'+esc(cal.d)+'</span></span>'
       +    '<span class="sm"><span class="l1">'
-      +      (single ? "" : '<span class="store">'+esc(o.store_name)+'</span> ')
+      +      (single ? "" : '<span class="store">'+esc(o.store_no+" "+o.store_name)+'</span> ')
       +      '（'+esc(cal.w)+'）叫貨・'+o.items.length+' 項</span>'
       /* 🔴 卡頭**不再印「預估到貨」**（軒徹 2026-09-19 msg25352 截圖圈掉）：
          每一條自己已經有「到貨」欄，卡頭再寫一個「該單最晚那天」只會被讀成
