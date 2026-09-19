@@ -383,6 +383,11 @@ document.getElementById("submitBtn").onclick=function(){
     .then(r=>r.json().catch(()=>({ok:false,error:"http-"+r.status})))
     .then(j=>{
       btn.disabled=false; btn.textContent="填寫完畢，送出";
+      /* 🔴 **叫貨頁刻意不自動跳回 1:1 對話**（軒徹 2026-09-20 msg25477「維持現狀」）。
+         進貨（receiving.html）與調撥（transfer.html）送出後會在 `BACK_DELAY_MS`＝5 秒後跳回去，
+         這一頁**不要照抄**：`scrDone` 上還有「看這張單」可以點，自動跳走等於把他從
+         一個有動作的畫面上拉開，而且他只剩 5 秒可以按。
+         ⛔ 不要為了「三頁行為一致」把 setTimeout 加回來 —— 這是他當場選的 A，不是漏做。 */
       if(j&&j.ok){ show("scrDone"); return; }
       alertBar("送不出去："+((j&&j.error)||"未知原因"));
     })
