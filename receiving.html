@@ -51,15 +51,26 @@
         vertical-align:middle}
   th{background:#f7f6f4;font-weight:600;font-size:12.5px;color:#555}
   tr:last-child td{border-bottom:0}
-  th.num,td.num{text-align:right;white-space:nowrap;width:74px}
-  th.got,td.got{text-align:center;width:92px}
-  td:first-child,th:first-child{padding-left:12px}
-  td:last-child,th:last-child{padding-right:12px}
+  /* 四欄擠在手機上：到貨／品項／叫貨／進貨。品項吃剩下的寬度，其餘三欄固定。
+     🔴 ⛔ 不要讓任何一欄用 auto —— 品名長短不一，auto 會讓每張卡的欄位對不齊。 */
+  th.eta,td.eta{width:46px;text-align:center;white-space:nowrap;
+                font-size:12.5px;color:var(--muted);line-height:1.25}
+  th.num,td.num{text-align:right;white-space:nowrap;width:58px}
+  th.got,td.got{text-align:center;width:116px}
+  td:first-child,th:first-child{padding-left:10px}
+  td:last-child,th:last-child{padding-right:10px}
+  .gotbox{display:flex;align-items:center;justify-content:flex-end;gap:5px}
+  /* 「全到」＝填上與叫貨數量相同的數字（軒徹 msg25341）。
+     🔴 flex 子元素預設會被壓縮，手機上按鈕會縮成一條 ⇒ 兩個都要 flex:0 0 auto。 */
+  .gotbox input{flex:0 0 auto}
+  .allbtn{flex:0 0 auto;border:1.5px solid var(--brand);background:#fff;color:var(--brand);
+          border-radius:8px;padding:7px 7px;font-size:12.5px;font-weight:700;line-height:1}
+  .allbtn:active{background:var(--brand-soft)}
   .name{font-weight:600}
   /* 規格不斷行：⛔ 不要讓「1Kg/包」被拆成「1Kg/」＋「包」，那個「包」會貼到下一行
      看起來像另一個欄位（叫貨頁同一個坑）。 */
   .spec{color:var(--muted);font-size:12.5px;white-space:nowrap}
-  input[type=number]{width:76px;padding:8px 4px;border:1.5px solid var(--line);border-radius:8px;
+  input[type=number]{width:60px;padding:8px 3px;border:1.5px solid var(--line);border-radius:8px;
                      font-size:16px;text-align:center;background:#fff}
   /* 填過的要看得出來——一次十幾條的時候，不標就分不清哪些填過、哪些剛好是 0 */
   input.filled{border-color:var(--ok);background:var(--brand-soft);font-weight:600}
@@ -197,16 +208,27 @@ function render(){
       +    '<span class="pill '+cls+'">'+filled+'/'+o.items.length+'</span>'
       +    '<span class="chev">▶</span>'
       +  '</summary>'
-      +  '<table><thead><tr><th>品項</th><th class="num">叫貨</th>'
+      +  '<table><thead><tr><th class="eta">到貨</th><th>品項</th><th class="num">叫貨</th>'
       +  '<th class="got">進貨數量</th></tr></thead><tbody>';
     o.items.forEach(function(it, ii){
       var v = (it.received === null || it.received === undefined) ? "" : it.received;
-      h += '<tr><td><div class="name">'+esc(it.name)+'</div>'
-        +  '<div class="spec">'+esc(it.spec || "")+'</div></td>'
+      /* 規格寫法與叫貨清單**同一個式子**（軒徹 msg25341「讓它跟叫貨清單一樣」）：
+         規格 ＋「*MOQ/箱」。🔴 MOQ 拿不到就只印規格，⛔ 不要印「*null/箱」也不要填 1 充數。 */
+      var spec = (it.spec || "") + (it.moq ? "*"+it.moq+"/箱" : "");
+      /* 到貨日逐條印（msg25341「品項前面新增預估到貨日」）。
+         🔴 目前同一張單的每一項都是同一天（＝叫貨日+7），所以這一欄現在會整排一樣。
+            ⛔ 不要因此改成「只印在卡頭」——他要的是逐條看得到，而且哪天不同供應商
+               有不同前置天數時，這一欄才是唯一看得出差別的地方。 */
+      h += '<tr><td class="eta">'+esc(md(o.eta))+'</td>'
+        +  '<td><div class="name">'+esc(it.name)+'</div>'
+        +  '<div class="spec">'+esc(spec)+'</div></td>'
         +  '<td class="num">'+esc(it.qty)+' '+esc(it.unit)+'</td>'
-        +  '<td class="got"><input type="number" inputmode="decimal" min="0" step="any"'
+        +  '<td class="got"><div class="gotbox">'
+        +  '<input type="number" inputmode="decimal" min="0" step="any"'
         +  ' id="q'+oi+'_'+ii+'" data-qty="'+esc(it.qty)+'" value="'+esc(v)+'"'
-        +  ' oninput="mark(this)" placeholder="—"></td></tr>';
+        +  ' oninput="mark(this)" placeholder="—">'
+        +  '<button type="button" class="allbtn" onclick="allIn('+oi+','+ii+')">全到</button>'
+        +  '</div></td></tr>';
     });
     h += '</tbody></table></details>';
   });
@@ -230,6 +252,18 @@ function paint(el){
 }
 
 function mark(el){ paint(el); tally(); }
+
+/* 「全到」＝把叫貨數量原樣填進去（軒徹 msg25341）。
+   🔴 值來源是 `data-qty`＝後端回的叫貨量，⛔ 不是畫面上另外算的東西：
+      算第二次就有機會跟表上的數字分岔，而分岔之後兩邊都看起來正常。
+   🔴 **只填不存**：填完仍要按「儲存」。⛔ 不要讓它順手送出——
+      「按一下就進系統」跟「我填一填再檢查」是兩種操作，後者才是收貨現場在做的事。 */
+function allIn(oi, ii){
+  var el = document.getElementById("q"+oi+"_"+ii);
+  if(!el) return;
+  el.value = el.getAttribute("data-qty");
+  mark(el);
+}
 
 function tally(){
   var total = 0, filled = 0, diff = 0;
