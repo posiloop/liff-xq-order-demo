@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>享奇雞 進貨</title>
+<style>
+  :root{
+    --bg:#f5f5f3; --card:#fff; --line:#e0ddd8; --ink:#1c1c1c; --muted:#6b6b6b;
+    --brand:#0f7b3f; --brand-soft:#eef7f1; --ok:#0f7b3f; --bad:#b42318;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  /* 同叫貨頁：連點輸入框不要觸發「連點兩下＝放大」（軒徹 msg24534 回報過）。
+     ⛔ 不要改用 maximum-scale／user-scalable=no，那是把整頁縮放關掉。 */
+  button,input{touch-action:manipulation}
+  html,body{max-width:100%;overflow-x:hidden}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",system-ui,sans-serif;
+       font-size:16px;line-height:1.55;padding-bottom:104px}
+  header{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;
+         padding:calc(env(safe-area-inset-top) + 12px) 14px 12px}
+  header .t{font-weight:700;font-size:17px}
+  header .t small{display:block;font-weight:400;opacity:.9;font-size:12.5px}
+  main{padding:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+        padding:12px;margin-bottom:12px}
+  .ordhead{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;margin-bottom:8px}
+  .ordhead .store{font-weight:700;font-size:16px}
+  .ordhead .no{color:var(--muted);font-size:12.5px;font-family:ui-monospace,Menlo,monospace}
+  .dates{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--muted);font-size:13px;
+         border-top:1px dashed var(--line);padding-top:8px;margin-bottom:6px}
+  .dates b{color:var(--ink);font-weight:600}
+  table{width:100%;table-layout:fixed;border-collapse:collapse}
+  th,td{padding:8px 4px;border-bottom:1px solid var(--line);text-align:left;font-size:14px;
+        vertical-align:middle}
+  th{background:#f0efec;font-weight:600;font-size:12.5px;color:#444}
+  tr:last-child td{border-bottom:0}
+  th.num,td.num{text-align:right;white-space:nowrap}
+  th.got,td.got{text-align:center;width:88px}
+  .name{font-weight:600}
+  /* 規格不斷行：⛔ 不要讓「1Kg/包」被拆成「1Kg/」＋「包」，那個「包」會貼到下一行
+     看起來像另一個欄位（叫貨頁同一個坑）。 */
+  .spec{color:var(--muted);font-size:12.5px;white-space:nowrap}
+  input[type=number]{width:72px;padding:8px 4px;border:1.5px solid var(--line);border-radius:8px;
+                     font-size:16px;text-align:center;background:#fff}
+  /* 填過的格子要看得出來——不然逐條收完之後分不清哪些填過、哪些是 0 */
+  input.filled{border-color:var(--ok);background:var(--brand-soft)}
+  .bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
+       padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);display:flex;gap:10px;align-items:center}
+  .bar .sum{flex:1;min-width:0;font-size:13px;color:var(--muted)}
+  .bar button{background:var(--brand);color:#fff;border:0;border-radius:10px;
+              padding:12px 20px;font-size:16px;font-weight:700}
+  .bar button[disabled]{background:#b9b9b9}
+  .msg{padding:14px;border-radius:12px;margin-bottom:12px;font-size:14.5px;line-height:1.7}
+  .msg.warn{background:#fff4e5;border:1px solid #f0c98a}
+  .msg.bad{background:#fdecea;border:1px solid #f2b5ae;color:var(--bad)}
+  .msg.ok{background:var(--brand-soft);border:1px solid #a9d6bc;color:var(--ok)}
+  .empty{color:var(--muted);text-align:center;padding:40px 16px;line-height:1.8}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="t">📦 進貨
+    <small id="sub">載入中…</small>
+  </div>
+</header>
+
+<main>
+  <div id="msg"></div>
+  <div id="list"></div>
+</main>
+
+<div class="bar" id="bar" style="display:none">
+  <div class="sum" id="sum"></div>
+  <button id="save" onclick="save()">儲存</button>
+</div>
+
+<script>
+/* ───────── 進貨頁（軒徹 2026-09-19 msg25331）────────────────────────────────
+   逐字：「核可過的訂單要跑到"進貨"按扭裡 / "進貨"裡面會逐條顯示叫貨的資訊 /
+          排序依 1叫貨日 2.預估到貨日 / 逐條後面幫我設計一個進貨數量」
+
+   🔴 **排序在後端做，這裡原樣照印**（⛔ 不要在前端再排一次）：
+      兩邊各排一次的那天，畫面上的序與後端算出來的序會不一樣，而兩邊都看起來正常。
+   🔴 **沒帶身分（u/s）不抓資料、也不假裝有資料**：直接講「這個網址少了身分」。
+      ⛔ 不可退回假資料 —— 這一頁不是雛形展示頁，填進去的是收貨數量。
+   🔴 「還沒填」與「填 0」是兩件事：沒填送 null（後端會把那格刪掉），
+      填 0 就是「到貨 0 件」。⛔ 不要把空字串當成 0 送出去。 */
+var ENDPOINT = "https://hook.aemassinc.net/xq";
+function qs(k){
+  var m = new RegExp("[?&]"+k+"=([^&]*)").exec(window.location.search);
+  return m ? decodeURIComponent(m[1].replace(/\+/g," ")) : "";
+}
+var Q_UID = qs("u"), Q_SIG = qs("s");
+var DATA = null;
+
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
+  });
+}
+function say(cls, html){ document.getElementById("msg").innerHTML =
+  '<div class="msg '+cls+'">'+html+'</div>'; }
+
+function load(){
+  if(!Q_UID || !Q_SIG){
+    document.getElementById("sub").textContent = "沒有身分";
+    say("warn", "這個網址少了身分資訊，看不到你的單。<br>請回 LINE 重新點一次「<b>進貨</b>」按鈕。");
+    return;
+  }
+  fetch(ENDPOINT+"/receiving?u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok){ throw new Error(d.error || "讀不到資料"); }
+      DATA = d;
+      render();
+    })
+    .catch(function(e){
+      document.getElementById("sub").textContent = "讀取失敗";
+      say("bad", "讀不到進貨清單：" + esc(e.message));
+    });
+}
+
+function render(){
+  var orders = DATA.orders || [];
+  document.getElementById("sub").textContent =
+    orders.length ? (orders.length + " 張單・" + DATA.count + " 項") : "目前沒有待進貨的單";
+  if(!orders.length){
+    document.getElementById("list").innerHTML =
+      '<div class="empty">目前沒有已核可、等著收貨的單。<br>'
+      + '叫貨單要先經過核可，才會出現在這裡。</div>';
+    return;
+  }
+  var h = "";
+  orders.forEach(function(o, oi){
+    h += '<div class="card">'
+      +  '<div class="ordhead"><span class="store">'+esc(o.store_name)+'</span>'
+      +  '<span class="no">'+esc(o.order_no)+'</span></div>'
+      +  '<div class="dates"><span>叫貨日 <b>'+esc(o.date)+'</b></span>'
+      +  '<span>預估到貨 <b>'+esc(o.eta || "—")+'</b></span>'
+      +  '<span>'+o.items.length+' 項</span></div>'
+      +  '<table><thead><tr>'
+      +  '<th>品項</th><th class="num" style="width:76px">叫貨</th>'
+      +  '<th class="got">進貨數量</th>'
+      +  '</tr></thead><tbody>';
+    o.items.forEach(function(it, ii){
+      var v = (it.received === null || it.received === undefined) ? "" : it.received;
+      h += '<tr><td><div class="name">'+esc(it.name)+'</div>'
+        +  '<div class="spec">'+esc(it.spec || "")+'</div></td>'
+        +  '<td class="num">'+esc(it.qty)+' '+esc(it.unit)+'</td>'
+        +  '<td class="got"><input type="number" inputmode="decimal" min="0" step="any"'
+        +  ' id="q'+oi+'_'+ii+'" value="'+esc(v)+'"'
+        +  (v === "" ? "" : ' class="filled"')
+        +  ' oninput="mark(this)" placeholder="—"></td></tr>';
+    });
+    h += '</tbody></table></div>';
+  });
+  document.getElementById("list").innerHTML = h;
+  document.getElementById("bar").style.display = "flex";
+  tally();
+}
+
+function mark(el){
+  el.className = el.value === "" ? "" : "filled";
+  tally();
+}
+
+function tally(){
+  var total = 0, filled = 0;
+  (DATA.orders || []).forEach(function(o, oi){
+    o.items.forEach(function(it, ii){
+      total++;
+      var el = document.getElementById("q"+oi+"_"+ii);
+      if(el && el.value !== "") filled++;
+    });
+  });
+  document.getElementById("sum").textContent = "已填 " + filled + " / " + total + " 項";
+}
+
+function save(){
+  var btn = document.getElementById("save");
+  var entries = [];
+  (DATA.orders || []).forEach(function(o, oi){
+    o.items.forEach(function(it, ii){
+      var el = document.getElementById("q"+oi+"_"+ii);
+      if(!el) return;
+      /* 空字串 → null＝「還沒填」，⛔ 不是 0。後端會把那一格刪掉，回到未填狀態。 */
+      entries.push({order_no:o.order_no, code:it.code,
+                    qty: el.value === "" ? null : el.value});
+    });
+  });
+  btn.disabled = true; btn.textContent = "儲存中…";
+  fetch(ENDPOINT+"/receive", {method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({u:Q_UID, s:Q_SIG, entries:entries})})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok){ throw new Error(d.error || "存不進去"); }
+      say("ok", "已儲存。");
+      /* 存完重讀 —— ⛔ 不要只把畫面上的值留著當「已儲存」：
+         那會在後端其實沒寫進去的時候顯示成功（[[f-actio-green]]）。 */
+      load();
+    })
+    .catch(function(e){ say("bad", "沒有存進去：" + esc(e.message)); })
+    .then(function(){ btn.disabled = false; btn.textContent = "儲存"; });
+}
+
+load();
+</script>
+</body>
+</html>
