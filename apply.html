@@ -259,7 +259,15 @@ $("submitBtn").onclick = function(){
   var text = applyText(a);
 
   // A：真 LIFF —— 代送，然後停在「等待認證」頁
-  if (liffReady && liff.isApiAvailable && liff.isApiAvailable("sendMessages")) {
+  // 🔴 **只有在網址沒帶身分時才走這條**（2026-09-20 01:0x 修，軒徹 msg25447「無法送出申請」）。
+  //    原本 A 排在 C 前面，於是**網址明明帶了簽章、卻還是先去試 LIFF 代送**：
+  //    從一般網址（非 liff.line.me）開啟時 `liff.init` 仍可能成功 ⇒ `liffReady=true`
+  //    ⇒ 走 A ⇒ `sendMessages` 在這個 context 下送不出去 ⇒ `.catch` → `toWait(a,false)`
+  //    ⇒ 使用者看到「請手動複製」而**後端一個請求都沒收到**（log 實查：零筆 `/xq/apply`）。
+  //    ⛔ 不要把這個條件拿掉：C 路（帶簽章直接 POST）是**確定可用**的那條，
+  //       A 路依賴 LIFF context ⇒ **確定可用的要排前面**。
+  if (!(Q_UID && Q_SIG && ENDPOINT)
+      && liffReady && liff.isApiAvailable && liff.isApiAvailable("sendMessages")) {
     $("submitBtn").disabled = true;
     liff.sendMessages([{ type: "text", text: text }])
       .then(function(){ toWait(a, true); })
