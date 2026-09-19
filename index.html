@@ -148,13 +148,36 @@
       <p>管理員那邊已經收到，不用再回「填寫完畢」了。</p>
     </div>
     <div class="done-box">
-      <div style="font-weight:700;margin-bottom:6px">台北江南店 叫貨單</div>
+      <div style="font-weight:700;margin-bottom:6px"><span id="doneStore">台北江南店</span> 叫貨單</div>
       <div class="meta" style="margin-bottom:12px">
         <span>單號 <b id="dNo2">—</b></span><span>合計 <b>$<span id="total2">0</span></b></span>
       </div>
-      <button class="ghost" onclick="alert('雛形展示：正式版這裡會下載當天的叫貨單 PDF。')">📄 下載叫貨單 PDF</button>
+      <!-- 2026-09-19 軒徹 msg25314/25316：原本這裡是一顆「下載叫貨單 PDF」的**假鈕**
+           （按下去只跳「雛形展示」四個字）。他選 1「單純給下單的人看」⇒ 改成看網頁版。
+           🔴 ⛔ 不要改回出 PDF：叫貨單是需求憑證、還會改，送出當下出的 PDF 隔一次改單就過期，
+              而過期的紙看起來完全正常。PDF 要等驗收那關把量定案之後才有意義。 -->
+      <button class="ghost" onclick="openView()">📄 看這張單</button>
     </div>
     <button class="ghost" onclick="show('scrOrder')">← 回去看填的內容</button>
+  </main>
+</section>
+
+<!-- ②-b 看這張單（現讀，不是送出當下的快照） -->
+<section class="screen" id="scrView">
+  <main>
+    <div class="done-box">
+      <div style="font-weight:700;margin-bottom:6px"><span id="vStore">—</span> 叫貨單</div>
+      <div class="meta" style="margin-bottom:10px">
+        <span>單號 <b id="vNo">—</b></span><span id="vDateWrap">日期 <b id="vDate">—</b></span>
+      </div>
+      <div id="vBody">讀取中…</div>
+      <div class="meta" style="margin-top:10px;justify-content:flex-end">
+        <span>合計 <b>$<span id="vTotal">0</span></b></span>
+      </div>
+      <!-- 🔴 講清楚這頁是「現在的樣子」，否則他改完單再打開會以為系統沒更新 -->
+      <div class="note" style="margin-top:8px">這頁是**現在**的內容：改過單再打開，看到的就是改完的版本。</div>
+    </div>
+    <button class="ghost" onclick="show('scrDone')">← 回上一頁</button>
   </main>
 </section>
 
@@ -345,7 +368,8 @@ function show(id){
   window.scrollTo(0,0);
 }
 /* ───────── 送出 ─────────────────────────────────────────────────────────
-   LIVE：POST /xq/order → 寫**副本**叫貨表。失敗一律把後端原話印出來，
+   LIVE：POST /xq/order → 寫**正式**叫貨明細（2026-09-19 接正式，副本已刪）。
+         ⚠️ 送出去就是真的一列，會進應收明細。失敗一律把後端原話印出來，
          ⛔ 不可回到「已送出」畫面 —— 那會讓店長以為單下了。
    雛形：維持原本行為（只切畫面），並在按鈕旁講明它不會進任何系統。 */
 document.getElementById("submitBtn").onclick=function(){
@@ -410,6 +434,9 @@ render(); setRole("store");
       const pre = (j && j.prefill) || {};
       qty = ITEMS.map(it => Number(pre[it.code]) || 0);
       document.getElementById("hdrSub").textContent = j.store_name;
+      /* 送出成功那張卡的店名原本是寫死的「台北江南店」⇒ 開第二家店就會顯示錯的店名。
+         跟標題列用同一個來源，⛔ 不要再留一份寫死的。 */
+      document.getElementById("doneStore").textContent = j.store_name;
       /* 這行是雛形留下的：真品項載進來之後它就變成一句假話，要收掉。 */
       document.getElementById("demoNote").style.display="none";
       document.getElementById("dNo").textContent = Q_STORE + todayNo();
@@ -426,6 +453,50 @@ render(); setRole("store");
 function todayNo(){ const d=new Date();
   return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,"0")
         +String(d.getDate()).padStart(2,"0"); }
+
+/* ───────── 「看這張單」（軒徹 2026-09-19 msg25316 選 1：單純給下單的人看）─────────
+   🔴 每次點開都**現讀** `/xq/view`，⛔ 不可以拿送出當下的回傳值來畫：
+      這顆鈕存在的唯一理由就是「改過單之後看到的是改完的版本」，
+      用快照畫的話它跟原本那顆假的 PDF 鈕一樣沒用，只是比較不明顯。
+   🔴 失敗一律把後端原話印出來，⛔ 不准畫一張空單——空白畫面跟「這張單沒東西」長得一樣。 */
+function openView(){
+  if(!LIVE){ alert("雛形展示：正式版這裡會顯示你剛送出的那張單。"); return; }
+  const no = document.getElementById("dNo2").textContent.trim();
+  document.getElementById("vBody").textContent = "讀取中…";
+  document.getElementById("vNo").textContent = no;
+  show("scrView");
+  fetch(ENDPOINT+"/view?no="+encodeURIComponent(no)
+        +"&store="+encodeURIComponent(Q_STORE)
+        +"&u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG))
+    .then(r=>r.json())
+    .then(j=>{
+      if(!j||!j.ok){ document.getElementById("vBody").textContent =
+        "看不到這張單：" + ((j&&j.error)||"未知原因"); return; }
+      document.getElementById("vStore").textContent = j.store_name || "";
+      document.getElementById("vNo").textContent    = j.order_no || no;
+      document.getElementById("vDate").textContent  = j.date || "—";
+      document.getElementById("vTotal").textContent = fmt(j.total||0);
+      if(!j.items || !j.items.length){
+        document.getElementById("vBody").textContent = j.empty_reason || "這張單沒有品項。";
+        return;
+      }
+      /* 用頁面既有的 .name／.spec／td.num，⛔ 不要為了這張表另外發明一套 class */
+      const rows = j.items.map(it =>
+        '<tr><td><div class="name">'+esc(it.name)+'</div>'
+        +'<div class="spec">'+esc(it.spec||"")+'</div></td>'
+        +'<td class="num">'+esc(it.qty)+' '+esc(it.unit||"")+'</td>'
+        +'<td class="num">$'+fmt(it.amount||0)+'</td></tr>').join("");
+      document.getElementById("vBody").innerHTML =
+        '<table><tbody>'+rows+'</tbody></table>';
+    })
+    .catch(()=>{ document.getElementById("vBody").textContent =
+      "連不到後端，這張單沒讀到（不是沒有東西，是讀不到）。"; });
+}
+/* 🔴 品名／規格是從表上讀回來的字，⛔ 一律跳脫再塞進 innerHTML：
+      ERP 的品名欄是人打的，哪天有人打了一個 `<` 就會把整張表排版弄壞。 */
+function esc(s){ return String(s==null?"":s)
+  .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+  .replace(/"/g,"&quot;"); }
 
 /* ───────── LIFF：有就用，沒有就當一般網頁跑（雛形要能直接點開看） ─────────
    正式版才會綁真的 LIFF ID，並用 liff.getProfile() 的 userId 決定這個人是哪一間店。 */
