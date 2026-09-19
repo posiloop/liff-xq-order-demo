@@ -73,16 +73,26 @@
 
     <div class="card">
       <label for="store">1. 選擇店鋪</label>
+      <!-- 🔴 2026-09-20 msg25495／25496（他附了 ERP〈門市資訊〉截圖，原話「這些門市都要上」）：
+           補上 0000 中轉倉、1001 鴻海、1002 中科、1003 享時蔬，**順序照他截圖＝ERP 門市資訊的順序**
+           （⛔ 不是舊版那個配送路線序，2008 因此從 2004 後面移到 2007 後面）。
+           ⚠️ 這張清單是**寫死的**，跟 ERP〈門市資訊〉沒有連線 ⇒ 開新店會再漂一次。
+              要不要改成從後端現撈已問他（msg25497），⛔ 未自行動手：現在純靜態頁沒有後端相依，
+              改成現撈之後「後端掛掉＝選單全空」，失效方向比「清單過期」更糟。 -->
       <select id="store">
         <option value="">請選擇</option>
         <option value="2001">台北江南店</option>
         <option value="2002">台北瑞湖店</option>
         <option value="2003">台北昆陽店</option>
         <option value="2004">新北中和店</option>
-        <option value="2008">汐止中興店</option>
         <option value="2005">台中逢甲店</option>
         <option value="2006">台北錦州店</option>
         <option value="2007">台南永華店</option>
+        <option value="2008">汐止中興店</option>
+        <option value="0000">中轉倉(新莊央廚)</option>
+        <option value="1001">益循鴻海店</option>
+        <option value="1002">益循中科店</option>
+        <option value="1003">享時蔬台中站前店</option>
       </select>
 
       <label for="name">2. 姓名</label>
