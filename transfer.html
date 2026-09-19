@@ -347,13 +347,20 @@ function renderIn(){
       +  '<summary>'
       +    '<span class="cal"><span class="m">'+esc(cal.m)+'</span>'
       +      '<span class="d">'+esc(cal.d)+'</span></span>'
-      +    '<span class="sm"><span class="l1"><span class="from">'+esc(o.from_name)+'</span>'
-      +      ' 調給你（'+esc(cal.w)+'）</span>'
+      /* 軒徹 msg25468 三件：① 店名前綴店號 ② 拿掉「調給你（日）」 ③ 單號自己一行放店名下面。
+         🔴 `from_no` 查不到時是空字串 ⇒ 只印店名，⛔ 不要補一個「未知」之類的字
+            （後端 `_party_no` 刻意不拋，理由在那支註解）。
+         🔴 星期只在這裡出現過 ⇒ 拿掉「調給你（日）」等於整張卡沒有星期了，
+            這是他要的：日期本來就在左邊那塊日曆 chip 上。 */
+      +    '<span class="sm"><span class="l1"><span class="from">'
+      +      esc((o.from_no ? o.from_no + " " : "") + o.from_name)+'</span></span>'
       +      '<span class="l2">單號 '+esc(o.transfer_no)+'</span></span>'
       +    '<span class="pill '+cls+'">'+filled+'/'+o.items.length+'</span>'
       +    '<span class="chev">▶</span>'
       +  '</summary>'
-      +  '<table><thead><tr><th>品項</th><th class="num">調出</th>'
+      /* 「對方調出」而非「調出」（軒徹 msg25468）：這一頁兩塊都有「調出」二字，
+         分頁鍵那顆是**我調出去**，這張表的這一欄是**對方調出給我**——同字不同向。 */
+      +  '<table><thead><tr><th>品項</th><th class="num">對方調出</th>'
       +  '<th class="got"><span class="gotbox">'
       +  '<span class="allbtn ghost" aria-hidden="true">取消</span>'
       +  '<span class="gothd">實收</span>'
