@@ -119,16 +119,23 @@
   .bar button{background:var(--brand);color:#fff;border:0;border-radius:10px;
               padding:12px 20px;font-size:16px;font-weight:700}
   .bar button[disabled]{background:#b9b9b9}
-  /* 「儲存」是次要動作（不動帳）⇒ 白底綠框；「結束進貨」是會出帳那顆 ⇒ 實心綠。
-     ⛔ 兩顆都做成實心綠的話，會出帳的那顆就沒有任何視覺上的重量了。 */
-  .bar button.ghostbtn{background:#fff;color:var(--brand);border:1.5px solid var(--brand);
-                       padding:11px 14px}
-  .bar button.ghostbtn[disabled]{background:#fff;color:#b9b9b9;border-color:#ddd}
   .msg{padding:13px;border-radius:12px;margin-bottom:12px;font-size:14.5px;line-height:1.7}
   .msg.warn{background:#fff4e5;border:1px solid #f0c98a}
   .msg.bad{background:#fdecea;border:1px solid #f2b5ae;color:var(--bad)}
   .msg.ok{background:var(--brand-soft);border:1px solid #a9d6bc;color:var(--ok)}
   .empty{color:var(--muted);text-align:center;padding:40px 16px;line-height:1.8}
+  /* ── 第二段：確認用的「進貨清單」（msg25379）───────────────────────────── */
+  .back{display:inline-block;margin-bottom:10px;color:var(--brand);font-weight:700;font-size:14px}
+  .rv{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+      margin-bottom:10px}
+  .rv h3{font-size:14.5px;padding:11px 12px;background:#f7f6f4;color:#444;font-weight:700}
+  .rv .ln{display:flex;gap:8px;padding:9px 12px;border-top:1px solid var(--line);font-size:14px}
+  .rv .ln .nm{flex:1;min-width:0}
+  .rv .ln .nm small{display:block;color:var(--muted);font-size:12px}
+  .rv .ln .q{flex:0 0 auto;text-align:right;white-space:nowrap;font-weight:700}
+  /* 沒填的也列出來 ⛔ 不可以只列有填的：「漏了一項」正是要在這一頁被看見的東西 */
+  .rv .ln.skip .q{color:var(--muted);font-weight:400}
+  .rv .ln .q em{display:block;font-style:normal;font-size:12px;font-weight:400;color:var(--warn)}
 </style>
 </head>
 <body>
@@ -146,12 +153,11 @@
 
 <div class="bar" id="bar" style="display:none">
   <div class="sum" id="sum"></div>
-  <!-- 🔴 兩顆鍵語意不同，顏色也不同（軒徹 2026-09-19 msg25373）：
-       「儲存」＝存進度，**不動帳**，灰的。
-       「結束進貨」＝這批收完了，**會寫進應收明細**，綠的。
-       ⛔ 不可以做成一顆：一顆的那天，「我先存一下待會再填」就等於出帳。 -->
-  <button id="save" class="ghostbtn" onclick="save(false)">儲存</button>
-  <button id="fin" onclick="save(true)">結束進貨</button>
+  <!-- 🔴 **一顆鍵 ＋ 兩段確認**（軒徹 2026-09-19 msg25379：
+       「下方只需要有一個按鍵／點了就跑出一張進貨清單／再按一次確認完成了」）。
+       ⛔ 不要改回兩顆：msg25373 那版的「儲存／結束進貨」已被這則推翻。
+       ⛔ 也不要把兩段併成一段：**第二段才寫應收明細**，沒有那一段就等於按一下就出帳。 -->
+  <button id="act" onclick="act()">完成進貨</button>
 </div>
 
 <script>
@@ -357,52 +363,120 @@ function tally(){
     + (diff ? '　<span style="color:#b06a00">'+diff+' 項與叫貨量不同</span>' : "");
 }
 
-/* `finish=false` ＝儲存（只存進度）／`finish=true` ＝結束進貨（**會寫應收明細**）。
-   🔴 兩條走**同一支** `save()`：分成兩支的那天，其中一支會漏掉「空字串→null」那條規則，
-      而漏掉的症狀是「沒填的格子被當成 0 收下」。 */
-function save(finish){
-  var btn = document.getElementById(finish ? "fin" : "save");
-  var other = document.getElementById(finish ? "save" : "fin");
-  var entries = [];
+/* ───────── 一顆鍵 ＋ 兩段確認（軒徹 msg25379）────────────────────────────────
+   第一段 `完成進貨` → **純前端**組一張「進貨清單」給他看，⛔ 這一段不打任何 API、不寫任何東西。
+   第二段 `確認送出` → 才 POST（`finish:true`），那一刻才寫應收明細。
+   🔴 **兩段之間不可以有任何寫入**：中間反悔按「返回修改」要能什麼都沒發生。
+   ⚠️ 已知取捨：一顆鍵之後**沒有「先存起來」這件事**了 —— 填到一半離開就是沒了。
+      後端 `receive_save(finish=False)` 那條路仍在（測試也還在跑），要接回來只差一顆鍵。 */
+var MODE = "edit";
+
+function collect(){
+  var out = [];
   (DATA.orders || []).forEach(function(o, oi){
     o.items.forEach(function(it, ii){
       var el = document.getElementById("q"+oi+"_"+ii);
       if(!el) return;
       /* 空字串 → null＝「還沒填」，⛔ 不是 0。後端會把那一格刪掉，回到未填狀態。 */
-      entries.push({order_no:o.order_no, code:it.code,
-                    qty: el.value === "" ? null : el.value});
+      out.push({order_no:o.order_no, code:it.code, name:it.name, spec:it.spec,
+                unit:it.unit, want:it.qty,
+                qty: el.value === "" ? null : el.value});
     });
   });
-  /* 🔴 結束是會出帳的動作 ⇒ 沒填滿要**問一句**（軒徹 msg25373「沒填滿可以按結束」）。
-     ⛔ 不可以擋：缺貨就是缺貨，擋住他就沒辦法把這批結掉。只確認，不阻止。
-     ⚠️ 用 confirm() 是唯一會凍住頁面的地方，且只在使用者主動按「結束進貨」時才會出現。 */
-  if(finish){
-    var blank = entries.filter(function(e){ return e.qty === null; }).length;
-    if(blank && !window.confirm("還有 "+blank+" 項沒填。\n沒填的算「這次沒到」，之後還看得到。\n\n確定結束這次進貨？")){
+  return out;
+}
+
+/* 第一段：把要送出去的東西攤開來給他看。
+   🔴 列的是 `collect()` 的結果本身，⛔ 不是另外再從畫面算一次 ——
+      「看到的」跟「送出的」必須是**同一份資料**，否則這一頁就失去了確認的意義。 */
+function review(entries){
+  var by = {}, order = [];
+  entries.forEach(function(e){
+    if(!by[e.order_no]){ by[e.order_no] = []; order.push(e.order_no); }
+    by[e.order_no].push(e);
+  });
+  var h = '<a class="back" href="javascript:void(0)" onclick="back()">← 返回修改</a>';
+  order.forEach(function(no){
+    h += '<div class="rv"><h3>單號 '+esc(no)+'</h3>';
+    by[no].forEach(function(e){
+      var skip = e.qty === null;
+      var left = skip ? null : (Number(e.want) - Number(e.qty));
+      h += '<div class="ln'+(skip ? " skip" : "")+'">'
+        +  '<span class="nm">'+esc(e.name)+'<small>'+esc(e.spec || "")+'</small></span>'
+        +  '<span class="q">'
+        +  (skip ? "未填" : esc(e.qty)+" "+esc(e.unit))
+        +  (skip || left <= 0 ? "" : '<em>還差 '+esc(left)+'</em>')
+        +  (!skip && left < 0 ? '<em>多 '+esc(-left)+'</em>' : "")
+        +  '</span></div>';
+    });
+    h += '</div>';
+  });
+  document.getElementById("list").innerHTML = h;
+  window.scrollTo(0, 0);
+}
+
+function back(){
+  MODE = "edit";
+  document.getElementById("act").textContent = "完成進貨";
+  say("", "");
+  render();
+  /* 🔴 `render()` 是照 `DATA` 重畫的，而**一顆鍵之後沒有任何東西被存起來**
+     ⇒ 不把 `PENDING` 寫回去的話，按「返回修改」會把他剛剛填的十幾格全部清空，
+     而畫面看起來只是「回到上一頁」。⛔ 這一段不可以省。 */
+  var pos = {};
+  PENDING.forEach(function(e){ pos[e.order_no+"|"+e.code] = e.qty; });
+  (DATA.orders || []).forEach(function(o, oi){
+    o.items.forEach(function(it, ii){
+      var v = pos[o.order_no+"|"+it.code];
+      var el = document.getElementById("q"+oi+"_"+ii);
+      if(el && v !== undefined && v !== null){ el.value = v; paint(el); }
+    });
+  });
+  tally();
+}
+
+function act(){
+  var btn = document.getElementById("act");
+  if(MODE === "edit"){
+    PENDING = collect();
+    var filled = PENDING.filter(function(e){ return e.qty !== null; }).length;
+    if(!filled){
+      say("warn", "一項都沒填，沒有東西可以進貨。");
       return;
     }
+    MODE = "review";
+    btn.textContent = "確認送出";
+    say("warn", "確認下面這張進貨清單。<b>再按一次「確認送出」才會寫進去。</b>");
+    review(PENDING);
+    return;
   }
-  var label = finish ? "結束進貨" : "儲存";
-  btn.disabled = true; other.disabled = true;
-  btn.textContent = finish ? "結束中…" : "儲存中…";
+  /* 第二段：真的寫 */
+  btn.disabled = true; btn.textContent = "送出中…";
   fetch(ENDPOINT+"/receive", {method:"POST",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({u:Q_UID, s:Q_SIG, entries:entries, finish: finish === true})})
+        body: JSON.stringify({u:Q_UID, s:Q_SIG, finish:true,
+                              entries: PENDING.map(function(e){
+                                return {order_no:e.order_no, code:e.code, qty:e.qty};
+                              })})})
     .then(function(r){ return r.json(); })
     .then(function(d){
-      if(!d.ok){ throw new Error(d.error || "存不進去"); }
-      /* 🔴 兩種動作要講**不一樣的話**：講一樣的話，他分不出剛剛那一下有沒有出帳。 */
-      say("ok", finish
-        ? ("這次進貨結束了。" + (d.full ? "已到齊的 "+d.full+" 項寫進應收明細。" : "沒有到齊的品項，應收明細沒有異動。")
-           + "還沒到的下次打開還會看到。")
-        : "已儲存（只是存起來，還沒結束這次進貨，應收明細沒有異動）。");
-      /* 存完重讀 —— ⛔ 不要只把畫面上的值留著當「已儲存」：
-         那會在後端其實沒寫進去的時候顯示成功（[[f-actio-green]]）。 */
-      load();
+      if(!d.ok){ throw new Error(d.error || "寫不進去"); }
+      MODE = "edit";
+      say("ok", "這次進貨完成了，已寫進應收明細（"+(d.full||0)+" 筆）。"
+              + "還沒到的下次打開還會看到。");
+      load();                     /* ⛔ 不要只留畫面上的值當「成功」（[[f-actio-green]]） */
     })
-    .catch(function(e){ say("bad", (finish ? "沒有結束成功：" : "沒有存進去：") + esc(e.message)); })
-    .then(function(){ btn.disabled = false; other.disabled = false; btn.textContent = label; });
+    .catch(function(e){
+      /* 🔴 失敗要**留在確認頁**，⛔ 不可以退回編輯頁：退回去看起來像「我剛剛沒按到」，
+         他會重填一次；留在這裡他才知道是「按了但沒成功」。 */
+      say("bad", "沒有寫進去：" + esc(e.message) + "　再按一次「確認送出」就好。");
+    })
+    .then(function(){
+      btn.disabled = false;
+      btn.textContent = MODE === "review" ? "確認送出" : "完成進貨";
+    });
 }
+var PENDING = [];
 
 load();
 </script>
