@@ -450,7 +450,8 @@ function act(){
     }
     MODE = "review";
     btn.textContent = "確認送出";
-    say("warn", "請確認以下進貨清單。<b>確認無誤後按「確認送出」完成登錄。</b>");
+    /* 「完成登錄」四個字拿掉（軒徹 msg25471）。⛔ 句號留著，不要連標點一起砍。 */
+    say("warn", "請確認以下進貨清單。<b>確認無誤後按「確認送出」。</b>");
     review(PENDING);
     return;
   }
