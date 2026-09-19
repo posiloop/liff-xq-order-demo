@@ -53,8 +53,12 @@
   tr:last-child td{border-bottom:0}
   /* 四欄擠在手機上：到貨／品項／叫貨／進貨。品項吃剩下的寬度，其餘三欄固定。
      🔴 ⛔ 不要讓任何一欄用 auto —— 品名長短不一，auto 會讓每張卡的欄位對不齊。 */
-  th.eta,td.eta{width:46px;text-align:center;white-space:nowrap;
+  th.eta,td.eta{width:50px;text-align:center;white-space:nowrap;
                 font-size:12.5px;color:var(--muted);line-height:1.25}
+  /* 表頭「預估到貨日」（軒徹 2026-09-19 msg25361）比欄寬長 ⇒ 只有表頭放行斷行，
+     斷點寫死成「預估／到貨日」。🔴 ⛔ 不要為了讓它一行放得下就把欄位加寬 ——
+     這一欄下面裝的是「9/24」，加寬只是把品名那欄擠掉。 */
+  th.eta{white-space:normal;line-height:1.2;font-size:11.5px}
   th.num,td.num{text-align:right;white-space:nowrap;width:58px}
   th.got,td.got{text-align:center;width:116px}
   td:first-child,th:first-child{padding-left:10px}
@@ -66,6 +70,13 @@
   .allbtn{flex:0 0 auto;border:1.5px solid var(--brand);background:#fff;color:var(--brand);
           border-radius:8px;padding:7px 7px;font-size:12.5px;font-weight:700;line-height:1}
   .allbtn:active{background:var(--brand-soft)}
+  /* 表頭「進貨數量」要**壓在下面那個數字框正上方**（軒徹 2026-09-19 msg25361）。
+     🔴 作法是讓表頭跑**同一個 .gotbox flex**，再放一顆看不見的「全到」佔位 ——
+        這樣按鈕字級／padding 之後怎麼改，表頭都自己跟著走。
+     ⛔ 不要改成 `th.got{text-align:right}` 或寫死 `padding-right:44px`：
+        那是拿當下的按鈕寬度算出來的常數，按鈕一改就無聲跑掉（而且看起來還是對齊的）。 */
+  .gothd{flex:0 0 60px;text-align:center}   /* 60px ＝ input[type=number] 的 width */
+  .allbtn.ghost{visibility:hidden}
   .name{font-weight:600}
   /* 規格不斷行：⛔ 不要讓「1Kg/包」被拆成「1Kg/」＋「包」，那個「包」會貼到下一行
      看起來像另一個欄位（叫貨頁同一個坑）。 */
@@ -219,8 +230,10 @@ function render(){
       +    '<span class="pill '+cls+'">'+filled+'/'+o.items.length+'</span>'
       +    '<span class="chev">▶</span>'
       +  '</summary>'
-      +  '<table><thead><tr><th class="eta">到貨</th><th>品項</th><th class="num">叫貨</th>'
-      +  '<th class="got">進貨數量</th></tr></thead><tbody>';
+      +  '<table><thead><tr><th class="eta">預估<br>到貨日</th><th>品項</th><th class="num">叫貨</th>'
+      +  '<th class="got"><span class="gotbox"><span class="gothd">進貨數量</span>'
+      +  '<span class="allbtn ghost" aria-hidden="true">全到</span></span></th>'
+      +  '</tr></thead><tbody>';
     o.items.forEach(function(it, ii){
       var v = (it.received === null || it.received === undefined) ? "" : it.received;
       /* 規格寫法與叫貨清單**同一個式子**（軒徹 msg25341「讓它跟叫貨清單一樣」）：
