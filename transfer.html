@@ -197,7 +197,7 @@ var BOT_ID = "@040xpvza";
 /* 送出成功後隔多久跳回 1:1 對話（毫秒）。軒徹 msg25473 問「跳轉速度可以設定嗎」⇒ 抽成這一顆，
    要改只改這裡。🔴 下限不是 0：立刻跳的話「已完成 / 已寫入 N 列」那句他看不到，
    而送出成功卻什麼都沒看到，跟送出失敗長得一模一樣（[[f-actio-green]] 同族）。 */
-var BACK_DELAY_MS = 1500;
+var BACK_DELAY_MS = 5000;   /* 軒徹 msg25475「跳轉時間設定 5 秒」（原 1500） */
 
 function esc(s){
   return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){

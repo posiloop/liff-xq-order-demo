@@ -191,6 +191,13 @@ function esc(s){
 /* 叫貨機器人的 LINE basic ID。與 apply.html 同一個值、同一個來源（`GET /v2/bot/info` 實查，
    displayName「叫貨機器人」）。⛔ 兩邊分岔的話，其中一邊會把人送去別的帳號而且不會報錯。 */
 var BOT_ID = "@040xpvza";
+/* 送出成功後隔多久跳回 1:1 對話（毫秒）。軒徹 msg25475「跳轉時間設定 5 秒／進貨叫貨都是」⇒ 5000（原 1500）。
+   🔴 與 `transfer.html` 的 `BACK_DELAY_MS` **同名同值**，⛔ 但兩頁各有一份：
+      這兩個檔是獨立的靜態頁，沒有共用的 JS —— 硬湊一個共用檔只會多一個要同步的地方。
+      改的時候兩頁都要改，這行字就是提醒。
+   🔴 下限不是 0：立刻跳的話「已登錄完成」那句他看不到，
+      而送出成功卻什麼都沒看到，跟送出失敗長得一模一樣。 */
+var BACK_DELAY_MS = 5000;
 
 function say(cls, html){
   document.getElementById("msg").innerHTML = cls ? '<div class="msg '+cls+'">'+html+'</div>' : "";
@@ -477,8 +484,8 @@ function act(){
             `liff` 在這裡是 undefined，呼叫下去只會丟例外而且**畫面沒有任何變化**。
          ⇒ 走 `line://` 深連結回機器人的 1:1（四顆圖文選單按鈕就在那）。
             BOT_ID 與 `apply.html` 同一個來源（`GET /v2/bot/info` 實查），⛔ 不要在這裡另寫一個。
-         ⏱ 延遲 1.5 秒才跳：立刻跳的話上面那句「已登錄完成」他根本看不到，
-            而送出成功卻什麼都沒看到，跟送出失敗長得一模一樣。 */
+         ⏱ 延遲 `BACK_DELAY_MS` 才跳（值與理由在檔頭那顆常數上，⛔ 不要在這裡再寫一次秒數
+            —— 兩邊各寫一個數字，改了一邊就會有一句話永遠在說謊）。 */
       setTimeout(function(){
         /* 🔴 **用 `https://line.me/R/…`，⛔ 不要用 `line://`。**
            我 23:27 改成 `line://` 想省掉 Safari 那一跳，**實測是退步**：
@@ -486,7 +493,7 @@ function act(){
            （軒徹 23:34 錄影第 17 格），等於多一次點擊，而且看起來像出錯。
            `https://` 這條雖然會閃一下 Safari，但**不需要他再按一次**。 */
         location.href = "https://line.me/R/oaMessage/" + BOT_ID;
-      }, 1500);
+      }, BACK_DELAY_MS);
     })
     .catch(function(e){
       /* 🔴 失敗要**留在確認頁**，⛔ 不可以退回編輯頁：退回去看起來像「我剛剛沒按到」，
