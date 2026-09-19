@@ -479,7 +479,10 @@ function act(){
          ⏱ 延遲 1.5 秒才跳：立刻跳的話上面那句「已登錄完成」他根本看不到，
             而送出成功卻什麼都沒看到，跟送出失敗長得一模一樣。 */
       setTimeout(function(){
-        location.href = "https://line.me/R/oaMessage/" + BOT_ID;
+        /* 🔴 用 `line://` 直接切 app，⛔ 不要用 `https://line.me/R/...`：
+           後者是**網頁轉址**，實測（軒徹 23:25 那張截圖左上角是「◀ Safari」）會先彈出
+           Safari 再彈回 LINE。多一次跳轉除了難看，也是多一個會失敗的環節。 */
+        location.href = "line://oaMessage/" + BOT_ID;
       }, 1500);
     })
     .catch(function(e){
