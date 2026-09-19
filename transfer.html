@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>享奇雞 調撥</title>
+<style>
+  :root{
+    --bg:#f5f5f3; --card:#fff; --line:#e0ddd8; --ink:#1c1c1c; --muted:#6b6b6b;
+    --brand:#0f7b3f; --brand-soft:#eef7f1; --ok:#0f7b3f; --bad:#b42318; --warn:#b06a00;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  /* 同叫貨／進貨頁：連點輸入框不要觸發「連點兩下＝放大」（軒徹 msg24534 回報過）。
+     ⛔ 不要改用 maximum-scale／user-scalable=no，那是把整頁縮放關掉。 */
+  button,input,select,summary{touch-action:manipulation}
+  html,body{max-width:100%;overflow-x:hidden}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",system-ui,sans-serif;
+       font-size:16px;line-height:1.55;padding-bottom:130px}
+  header{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;
+         padding:calc(env(safe-area-inset-top) + 12px) 14px 0}
+  header .t{font-weight:700;font-size:17px}
+  header .t small{display:block;font-weight:400;opacity:.92;font-size:12.5px}
+  /* ── 兩大區塊（軒徹 msg25422「進去會有調出 跟調入兩大區塊」）──────────────
+     做成頁首下的兩顆分頁鍵，⛔ 不是上下堆疊：調出要選店、選品項、填數量，
+     調入要逐單填實收——兩邊各自都會長到一整頁，疊在一起等於每次都要捲過另一塊。 */
+  .tabs{display:flex;gap:0;margin-top:10px}
+  .tabs button{flex:1;background:transparent;border:0;border-bottom:3px solid transparent;
+               color:#d8ece1;font-size:15.5px;font-weight:700;padding:9px 0 8px}
+  .tabs button.on{color:#fff;border-bottom-color:#fff}
+  .tabs button .n{font-size:12px;font-weight:600;opacity:.9}
+  main{padding:12px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+        margin-bottom:10px;overflow:hidden}
+  .card h3{font-size:14.5px;padding:11px 12px;background:#f7f6f4;color:#444;font-weight:700;
+           border-bottom:1px solid var(--line)}
+  .pad{padding:12px}
+  label.fld{display:block;font-size:13px;color:var(--muted);margin-bottom:5px;font-weight:600}
+  /* 🔴 font-size 必須 >=16px：iOS Safari 對小於 16px 的輸入框／下拉會自動放大整頁。 */
+  select,input[type=number]{font-size:16px;border:1.5px solid var(--line);border-radius:8px;
+                            background:#fff;padding:9px 8px}
+  select.full{width:100%}
+  select.item{flex:1;min-width:0}
+  input[type=number]{width:74px;text-align:center;padding:9px 2px}
+  input.filled{border-color:var(--ok);background:var(--brand-soft);font-weight:600}
+
+  /* ── 調出：一列 ＝ 品項下拉 ＋ 數量 ＋ 移除 ───────────────────────────────
+     🔴 軒徹逐字「調出要有下拉式選單／選擇調出的品項」⇒ **挑著加**，
+        ⛔ 不是像叫貨頁那樣把全部品項列出來讓他找 —— 調撥一次通常一兩項，
+          列 60 項再從裡面找那一項，是把「挑一個」變成「掃一遍」。 */
+  .ln{display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
+  .ln:first-child{border-top:0}
+  .ln .rm{flex:0 0 auto;border:1.5px solid var(--line);background:#fff;color:var(--muted);
+          border-radius:8px;padding:9px 10px;font-size:13px;font-weight:600;line-height:1}
+  .ln .rm:active{background:#f1f0ee}
+  .addln{display:block;width:100%;border:1.5px dashed var(--line);background:#fff;
+         color:var(--brand);border-radius:10px;padding:11px;font-size:15px;font-weight:700;
+         margin-top:2px}
+  .hint{font-size:12.5px;color:var(--muted);padding:0 12px 12px;line-height:1.6}
+  .amt{font-size:12.5px;color:var(--muted);padding:2px 12px 0;text-align:right}
+
+  /* ── 調入：一張單一張卡（與進貨頁同形狀，軒徹「會類似進貨的排版」）────────── */
+  details.ord{background:var(--card);border:1px solid var(--line);border-radius:12px;
+              margin-bottom:10px;overflow:hidden}
+  details.ord[open]{border-color:#c9d9cf}
+  summary{list-style:none;cursor:pointer;padding:11px 12px;display:flex;
+          align-items:center;gap:10px}
+  summary::-webkit-details-marker{display:none}
+  .cal{flex:0 0 auto;width:46px;text-align:center;border:1px solid var(--line);
+       border-radius:8px;padding:3px 0;background:#faf9f7;line-height:1.15}
+  .cal .m{display:block;font-size:10.5px;color:var(--muted)}
+  .cal .d{display:block;font-size:19px;font-weight:700}
+  .sm{flex:1;min-width:0}
+  .sm .l1{font-weight:700;font-size:14.5px}
+  .sm .l1 .from{color:var(--brand)}
+  .sm .l2{color:var(--muted);font-size:12.5px}
+  .pill{flex:0 0 auto;font-size:12px;padding:3px 9px;border-radius:999px;
+        background:#f0efec;color:var(--muted);white-space:nowrap}
+  .pill.part{background:#fff4e5;color:var(--warn)}
+  .pill.done{background:var(--brand-soft);color:var(--ok)}
+  .chev{flex:0 0 auto;color:var(--muted);font-size:12px}
+  details[open] .chev{transform:rotate(90deg)}
+
+  table{width:100%;table-layout:fixed;border-collapse:collapse;border-top:1px solid var(--line)}
+  th,td{padding:8px 4px;border-bottom:1px solid var(--line);text-align:left;font-size:14px;
+        vertical-align:middle}
+  th{background:#f7f6f4;font-weight:600;font-size:12.5px;color:#555}
+  tr:last-child td{border-bottom:0}
+  /* 三欄：品項吃剩下的寬度，調出量與實收固定。
+     🔴 ⛔ 不要讓任何一欄用 auto —— 品名長短不一，auto 會讓每張卡的欄位對不齊。 */
+  th.num,td.num{text-align:right;white-space:nowrap;width:62px}
+  th.got,td.got{text-align:center;width:150px}
+  td:first-child,th:first-child{padding-left:10px}
+  td:last-child,th:last-child{padding-right:10px}
+  .gotbox{display:flex;align-items:center;justify-content:flex-end;gap:4px}
+  .gotbox input{flex:0 0 auto;width:56px}
+  /* 「全收」／「取消」兩顆**不可以長一樣**：一個填值、一個清值，
+     同色同框並排時按錯的成本是「剛點完全收又清掉」（進貨頁同一條）。 */
+  .allbtn{flex:0 0 auto;border:1.5px solid var(--brand);background:#fff;color:var(--brand);
+          border-radius:8px;padding:6px 5px;font-size:11.5px;font-weight:700;line-height:1}
+  .allbtn:active{background:var(--brand-soft)}
+  .allbtn.clr{border-color:var(--line);color:var(--muted);font-weight:600}
+  .allbtn.clr:active{background:#f1f0ee}
+  /* 表頭「實收」要壓在下面那個數字框正上方：讓表頭跑同一個 flex，再放一顆看不見的佔位鍵。
+     ⛔ 不要寫死 padding-right —— 那是拿當下的按鈕寬度算出來的常數，
+        按鈕一改就無聲跑掉（而且看起來還是對齊的）。 */
+  .gothd{flex:0 0 56px;text-align:center}   /* 56 ＝ .gotbox input 的 width，兩者必須一起改 */
+  .allbtn.ghost{visibility:hidden}
+  .name{font-weight:600}
+  /* 規格不斷行：⛔ 不要讓「1Kg/包」被拆成「1Kg/」＋「包」，那個「包」會貼到下一行
+     看起來像另一個欄位（叫貨頁同一個坑）。 */
+  .spec{color:var(--muted);font-size:12.5px;white-space:nowrap}
+
+  .bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
+       padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);
+       display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px 10px;align-items:center}
+  .bar .sum{flex:1 1 100%;min-width:0;font-size:13px;color:var(--muted);line-height:1.35}
+  .bar button{flex:0 0 auto;background:var(--brand);color:#fff;border:0;border-radius:10px;
+              padding:12px 20px;font-size:16px;font-weight:700}
+  .bar button[disabled]{background:#b9b9b9}
+  .msg{padding:13px;border-radius:12px;margin-bottom:12px;font-size:14.5px;line-height:1.7}
+  .msg.warn{background:#fff4e5;border:1px solid #f0c98a}
+  .msg.bad{background:#fdecea;border:1px solid #f2b5ae;color:var(--bad)}
+  .msg.ok{background:var(--brand-soft);border:1px solid #a9d6bc;color:var(--ok)}
+  .empty{color:var(--muted);text-align:center;padding:40px 16px;line-height:1.8}
+  /* ── 確認頁（兩段式的第二段）──────────────────────────────────────────── */
+  .back{display:inline-block;margin-bottom:10px;color:var(--brand);font-weight:700;font-size:14px}
+  .rv{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+      margin-bottom:10px}
+  .rv h3{font-size:14.5px;padding:11px 12px;background:#f7f6f4;color:#444;font-weight:700}
+  .rv .l{display:flex;gap:8px;padding:9px 12px;border-top:1px solid var(--line);font-size:14px}
+  .rv .l .nm{flex:1;min-width:0}
+  .rv .l .nm small{display:block;color:var(--muted);font-size:12px}
+  .rv .l .q{flex:0 0 auto;text-align:right;white-space:nowrap;font-weight:700}
+  .rv .l.skip .q{color:var(--muted);font-weight:400}
+  .rv .l .q em{display:block;font-style:normal;font-size:12px;font-weight:400;color:var(--warn)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="t"><span id="title">🔁 調撥</span>
+    <small id="sub">載入中…</small>
+  </div>
+  <div class="tabs">
+    <button id="tab-out" class="on" onclick="tab('out')">調出</button>
+    <button id="tab-in" onclick="tab('in')">調入 <span class="n" id="incnt"></span></button>
+  </div>
+</header>
+
+<main>
+  <div id="msg"></div>
+  <div id="pane"></div>
+</main>
+
+<div class="bar" id="bar" style="display:none">
+  <div class="sum" id="sum"></div>
+  <button id="act" onclick="act()">送出調撥</button>
+</div>
+
+<script>
+/* ───────── 調撥頁（軒徹 2026-09-20 00:01 msg25422 建）──────────────────────────
+   逐字：「點調撥後一樣要選店別／進去會有調出 跟調入兩大區塊／調入就是別人開過來的／
+          會類似進貨的排版／調出要有下拉式選單／選擇調出的品項(依照權限)／數量不用照moq」
+   msg25427：「寫入應收的前提是　要調入的店完成調入才寫」
+     ⇒ **調出送出不動帳**（只建單）；**調入按下完成才寫應收**（兩列：調出 −、調入 ＋）。
+
+   🔴 **沒帶身分（u/s）不抓資料、也不假裝有資料**。⛔ 不可退回假資料 ——
+      這一頁送出去的是兩家店的貨與錢。
+   🔴 **「還沒填」與「填 0」是兩件事**：沒填送 null（後端把那格刪掉），填 0 就是「收到 0 件」。
+   🔴 金額一律**後端算**（(數量/MOQ)×箱價）。這裡印的數字只是給人看的預估，
+      ⛔ 不可以把前端算的金額送上去 —— 那是讓使用者決定自己要付多少錢。 */
+var ENDPOINT = "https://hook.aemassinc.net/xq";
+function qs(k){
+  var m = new RegExp("[?&]"+k+"=([^&]*)").exec(window.location.search);
+  return m ? decodeURIComponent(m[1].replace(/\+/g," ")) : "";
+}
+var Q_UID = qs("u"), Q_SIG = qs("s"), Q_STORE = qs("store");
+var DATA = null, TAB = "out", MODE = "edit", PENDING = null;
+/* 調入方的店號（調出區塊那顆下拉）。🔴 宣告要在**用到它的 render 之前**：
+   靠 `var` hoisting 也能跑，但那是「第一次讀到的是 undefined」——
+   它剛好等價於「還沒選」所以不會出事，⛔ 不要依賴這種剛好。 */
+var TO_SEL = "";
+/* 調出的列（畫面上有幾列就有幾個元素）。⛔ 不從 DOM 反推：
+   移除中間一列之後，DOM 的 index 會整批位移，而綁在 onclick 上的舊 index 不會跟著改。 */
+var OUTLINES = [];
+
+/* 叫貨機器人的 LINE basic ID。與 apply.html／receiving.html 同一個值、同一個來源
+   （`GET /v2/bot/info` 實查）。⛔ 三邊分岔的話，其中一邊會把人送去別的帳號而且不會報錯。 */
+var BOT_ID = "@040xpvza";
+
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
+  });
+}
+function say(cls, html){
+  document.getElementById("msg").innerHTML = cls ? '<div class="msg '+cls+'">'+html+'</div>' : "";
+}
+/* "2026-09-18" → {m:"9月", d:"18", w:"四"}。⛔ 不用 new Date("2026-09-18")：
+   那在部分瀏覽器會被當 UTC 解析，日期整個差一天。自己切字串最安全。 */
+var WD = ["日","一","二","三","四","五","六"];
+function ymd(s){
+  var p = String(s || "").split("-");
+  if(p.length !== 3) return {m:"", d:"—", w:""};
+  var dt = new Date(+p[0], +p[1]-1, +p[2]);
+  return {m:(+p[1])+"月", d:String(+p[2]), w:WD[dt.getDay()]};
+}
+function money(n){
+  if(n === null || n === undefined || n === "") return "";
+  return "$" + Number(n).toLocaleString("en-US", {maximumFractionDigits:0});
+}
+
+function load(){
+  if(!Q_UID || !Q_SIG){
+    document.getElementById("sub").textContent = "缺少身分資訊";
+    say("warn", "此連結缺少身分資訊，無法顯示調撥頁。<br>請返回 LINE 重新點選「<b>調撥</b>」。");
+    return;
+  }
+  var url = ENDPOINT+"/transfer?u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG)
+          + (Q_STORE ? "&store="+encodeURIComponent(Q_STORE) : "");
+  fetch(url).then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok){ throw new Error(d.error || "讀不到資料"); }
+      DATA = d; say("", "");
+      document.getElementById("title").textContent =
+        "🔁 " + (DATA.store_no ? DATA.store_no + " " : "") + DATA.store_name;
+      render();
+    })
+    .catch(function(e){
+      document.getElementById("sub").textContent = "讀取失敗";
+      say("bad", "調撥頁讀取失敗：" + esc(e.message));
+    });
+}
+
+function tab(which){
+  if(MODE !== "edit"){ return; }    /* 確認頁不給切分頁：切過去再切回來，填的東西就沒了 */
+  TAB = which;
+  document.getElementById("tab-out").className = which === "out" ? "on" : "";
+  document.getElementById("tab-in").className = which === "in" ? "on" : "";
+  render();
+}
+
+function render(){
+  var inc = (DATA.incoming || []);
+  document.getElementById("incnt").textContent = inc.length ? "("+inc.length+")" : "";
+  if(TAB === "out"){ renderOut(); } else { renderIn(); }
+}
+
+/* ───────── 調出 ─────────────────────────────────────────────────────────── */
+function renderOut(){
+  document.getElementById("sub").textContent =
+    "調出・可調 " + (DATA.items || []).length + " 項";
+  if(!OUTLINES.length){ OUTLINES = [{code:"", qty:""}]; }
+
+  var h = '<div class="card"><h3>調去哪一間店</h3><div class="pad">'
+        + '<label class="fld" for="to">調入方</label>'
+        + '<select class="full" id="to" onchange="tally()"><option value="">請選擇…</option>';
+  (DATA.targets || []).forEach(function(t){
+    h += '<option value="'+esc(t.no)+'"'+(TO_SEL === t.no ? " selected" : "")+'>'
+      +  esc(t.no + " " + t.name)+'</option>';
+  });
+  h += '</select></div></div>';
+
+  h += '<div class="card"><h3>調出品項</h3>';
+  OUTLINES.forEach(function(ln, i){
+    h += '<div class="ln">'
+      +  '<select class="item" id="c'+i+'" onchange="pick('+i+')">'
+      +  '<option value="">選擇品項…</option>';
+    (DATA.items || []).forEach(function(it){
+      h += '<option value="'+esc(it.code)+'"'+(ln.code === it.code ? " selected" : "")+'>'
+        +  esc(it.name + (it.spec ? "（"+it.spec+"）" : ""))+'</option>';
+    });
+    /* 🔴 `step="any"` ＋ 不做倍數檢查（軒徹逐字「數量不用照moq」）。
+       ⛔ 不要順手加 `n % moq` 那道閘 —— 那是叫貨的規矩，他明講調撥不套。 */
+    h += '</select>'
+      +  '<input type="number" inputmode="decimal" min="0" step="any" id="q'+i+'"'
+      +  ' value="'+esc(ln.qty)+'" oninput="mark(this);tally()" placeholder="數量">'
+      +  '<button type="button" class="rm" onclick="rmLine('+i+')">移除</button>'
+      +  '</div>';
+    var it = byCode(ln.code);
+    if(it){
+      h += '<div class="amt">'+esc(it.spec || "")
+        +  (it.moq ? " *"+esc(it.moq)+"/箱" : "")
+        +  (ln.qty !== "" && it.box_price && it.moq
+            ? "　預估 " + money((Number(ln.qty)/it.moq) * it.box_price) : "")
+        +  '</div>';
+    }
+  });
+  h += '<div class="pad"><button type="button" class="addln" onclick="addLine()">＋ 新增一項</button></div>'
+    +  '<div class="hint">數量不必是整箱，零頭可以直接填。'
+    +  '<br>送出後這批貨會開一張調撥單給對方店鋪，<b>對方點收之前不會計入任何一邊的帳</b>。</div>'
+    +  '</div>';
+  document.getElementById("pane").innerHTML = h;
+  document.getElementById("act").textContent = "送出調撥";
+  document.getElementById("bar").style.display = "flex";
+  tally();
+}
+
+function byCode(code){
+  var f = (DATA.items || []).filter(function(x){ return x.code === code; });
+  return f.length ? f[0] : null;
+}
+/* 🔴 每一次重畫之前都要把畫面上的值收回 `OUTLINES`，⛔ 否則重畫就等於清空 ——
+   而那看起來只是「畫面閃了一下」。 */
+function syncOut(){
+  OUTLINES.forEach(function(ln, i){
+    var c = document.getElementById("c"+i), q = document.getElementById("q"+i);
+    if(c) ln.code = c.value;
+    if(q) ln.qty = q.value;
+  });
+  var to = document.getElementById("to");
+  if(to) TO_SEL = to.value;
+}
+function pick(i){ syncOut(); renderOut(); }
+function addLine(){ syncOut(); OUTLINES.push({code:"", qty:""}); renderOut(); }
+function rmLine(i){
+  syncOut();
+  OUTLINES.splice(i, 1);
+  if(!OUTLINES.length){ OUTLINES = [{code:"", qty:""}]; }
+  renderOut();
+}
+
+/* ───────── 調入 ─────────────────────────────────────────────────────────── */
+function renderIn(){
+  var orders = DATA.incoming || [];
+  document.getElementById("sub").textContent =
+    orders.length ? (orders.length + " 張待調入・" + orders.reduce(function(a,o){return a+o.count;},0) + " 項")
+                  : "目前沒有待調入的單";
+  if(!orders.length){
+    document.getElementById("pane").innerHTML =
+      '<div class="empty">目前沒有別家店調給你的單。<br>'
+      + '對方按下「送出調撥」之後，單子就會出現在這裡。</div>';
+    document.getElementById("bar").style.display = "none";
+    return;
+  }
+  var h = "";
+  orders.forEach(function(o, oi){
+    var cal = ymd(o.date);
+    var filled = o.items.filter(function(it){
+      var v = it.draft !== null && it.draft !== undefined ? it.draft : null;
+      return v !== null; }).length;
+    var cls = filled === 0 ? "" : (filled === o.items.length ? "done" : "part");
+    /* 最早那一張預設展開（等最久的最急）；其餘收起來 */
+    h += '<details class="ord"'+(oi === 0 ? " open" : "")+'>'
+      +  '<summary>'
+      +    '<span class="cal"><span class="m">'+esc(cal.m)+'</span>'
+      +      '<span class="d">'+esc(cal.d)+'</span></span>'
+      +    '<span class="sm"><span class="l1"><span class="from">'+esc(o.from_name)+'</span>'
+      +      ' 調給你（'+esc(cal.w)+'）</span>'
+      +      '<span class="l2">單號 '+esc(o.transfer_no)+'</span></span>'
+      +    '<span class="pill '+cls+'">'+filled+'/'+o.items.length+'</span>'
+      +    '<span class="chev">▶</span>'
+      +  '</summary>'
+      +  '<table><thead><tr><th>品項</th><th class="num">調出</th>'
+      +  '<th class="got"><span class="gotbox">'
+      +  '<span class="allbtn ghost" aria-hidden="true">取消</span>'
+      +  '<span class="gothd">實收</span>'
+      +  '<span class="allbtn ghost" aria-hidden="true">全收</span></span></th>'
+      +  '</tr></thead><tbody>';
+    o.items.forEach(function(it, ii){
+      var v = (it.draft === null || it.draft === undefined) ? "" : it.draft;
+      var spec = (it.spec || "");
+      /* `outstanding` ＝ 還沒收的量（調出量 − 已收）。分批收時「全收」填的是它，
+         ⛔ 不是原始調出量 —— 填原始量的話第二批會把整張單的量再收一次，
+           而畫面上看起來完全正常（進貨頁踩過同一個坑）。 */
+      var left = (it.outstanding === null || it.outstanding === undefined) ? it.qty : it.outstanding;
+      h += '<tr><td><div class="name">'+esc(it.name)+'</div>'
+        +  '<div class="spec">'+esc(spec)+'</div></td>'
+        +  '<td class="num">'+esc(left)+' '+esc(it.unit)+'</td>'
+        +  '<td class="got"><div class="gotbox">'
+        +  '<button type="button" class="allbtn clr" onclick="clearIn('+oi+','+ii+')">取消</button>'
+        +  '<input type="number" inputmode="decimal" min="0" step="any"'
+        +  ' id="r'+oi+'_'+ii+'" data-qty="'+esc(left)+'" value="'+esc(v)+'"'
+        +  ' oninput="mark(this);tally()" placeholder="—">'
+        +  '<button type="button" class="allbtn" onclick="allIn('+oi+','+ii+')">全收</button>'
+        +  '</div></td></tr>';
+    });
+    h += '</tbody></table></details>';
+  });
+  document.getElementById("pane").innerHTML = h;
+  /* 初始上色：render 完逐格套一次，⛔ 不要在組 HTML 時算 class ——
+     兩處各算一次就會分岔（改了 mark() 忘了改那邊）。 */
+  orders.forEach(function(o, oi){
+    o.items.forEach(function(_it, ii){
+      var el = document.getElementById("r"+oi+"_"+ii);
+      if(el) paint(el);
+    });
+  });
+  document.getElementById("act").textContent = "完成調入";
+  document.getElementById("bar").style.display = "flex";
+  tally();
+}
+
+function paint(el){
+  el.className = el.value === "" ? "" : "filled";
+}
+function mark(el){ paint(el); }
+
+/* 「全收」＝把**未收量**填進去（見 renderIn 裡那段）。🔴 只填不送，⛔ 不要順手送出。 */
+function allIn(oi, ii){
+  var el = document.getElementById("r"+oi+"_"+ii);
+  if(!el) return;
+  el.value = el.getAttribute("data-qty");
+  mark(el); tally();
+}
+/* 「取消」＝清成**空字串**，⛔ 不是 0 —— 空＝「還沒填」，0＝「一件都沒收到」。 */
+function clearIn(oi, ii){
+  var el = document.getElementById("r"+oi+"_"+ii);
+  if(!el) return;
+  el.value = "";
+  mark(el); tally();
+}
+
+/* ───────── 底欄統計 ─────────────────────────────────────────────────────── */
+function tally(){
+  var s = document.getElementById("sum"), btn = document.getElementById("act");
+  if(TAB === "out"){
+    syncOut();
+    var n = 0, est = 0, unknown = 0;
+    OUTLINES.forEach(function(ln){
+      if(!ln.code || ln.qty === "" || Number(ln.qty) <= 0) return;
+      n++;
+      var it = byCode(ln.code);
+      if(it && it.box_price && it.moq){ est += (Number(ln.qty)/it.moq) * it.box_price; }
+      else { unknown++; }
+    });
+    s.innerHTML = "已填 <b>"+n+"</b> 項"
+      + (est ? "　預估 "+money(est) : "")
+      + (unknown ? '　<span style="color:#b06a00">'+unknown+' 項算不出金額</span>' : "");
+    btn.disabled = false;
+    return;
+  }
+  var total = 0, filled = 0;
+  (DATA.incoming || []).forEach(function(o, oi){
+    o.items.forEach(function(_it, ii){
+      total++;
+      var el = document.getElementById("r"+oi+"_"+ii);
+      if(el && el.value !== "") filled++;
+    });
+  });
+  s.innerHTML = "已填 <b>"+filled+"</b> / "+total+" 項"
+    + '<br><span style="font-size:12px">按下「完成調入」之後，才會寫進兩邊的應收。</span>';
+  btn.disabled = false;
+}
+
+/* ───────── 兩段確認（與進貨頁同形狀，msg25379）─────────────────────────────
+   第一段 → **純前端**組一張清單給他看，⛔ 這一段不打任何 API、不寫任何東西。
+   第二段 → 才 POST。🔴 兩段之間不可以有任何寫入：中間反悔按「返回修改」要能什麼都沒發生。 */
+function collectOut(){
+  syncOut();
+  var out = [];
+  OUTLINES.forEach(function(ln){
+    if(!ln.code || ln.qty === "" || Number(ln.qty) <= 0) return;
+    var it = byCode(ln.code) || {};
+    out.push({code:ln.code, name:it.name || ln.code, spec:it.spec || "",
+              unit:it.unit || "", qty:ln.qty,
+              est:(it.box_price && it.moq) ? (Number(ln.qty)/it.moq)*it.box_price : null});
+  });
+  return out;
+}
+function collectIn(){
+  var out = [];
+  (DATA.incoming || []).forEach(function(o, oi){
+    o.items.forEach(function(it, ii){
+      var el = document.getElementById("r"+oi+"_"+ii);
+      if(!el) return;
+      /* 空字串 → null＝「還沒填」，⛔ 不是 0。後端會把那一格刪掉，回到未填狀態。 */
+      out.push({transfer_no:o.transfer_no, from_name:o.from_name,
+                code:it.code, name:it.name, spec:it.spec, unit:it.unit,
+                want:(it.outstanding === null || it.outstanding === undefined) ? it.qty : it.outstanding,
+                qty: el.value === "" ? null : el.value});
+    });
+  });
+  return out;
+}
+
+/* 列的是 `collect*()` 的結果本身，⛔ 不是另外再從畫面算一次 ——
+   「看到的」跟「送出的」必須是**同一份資料**，否則這一頁就失去了確認的意義。 */
+function reviewOut(entries){
+  var toName = "";
+  (DATA.targets || []).forEach(function(t){ if(t.no === TO_SEL) toName = t.no+" "+t.name; });
+  var h = '<a class="back" href="javascript:void(0)" onclick="back()">← 返回修改</a>'
+        + '<div class="rv"><h3>'+esc(DATA.store_no+" "+DATA.store_name)+' → '+esc(toName)+'</h3>';
+  entries.forEach(function(e){
+    h += '<div class="l"><span class="nm">'+esc(e.name)+'<small>'+esc(e.spec)+'</small></span>'
+      +  '<span class="q">'+esc(e.qty)+' '+esc(e.unit)
+      +  (e.est === null ? '<em>金額待確認</em>' : '<em>'+esc(money(e.est))+'</em>')
+      +  '</span></div>';
+  });
+  h += '</div><div class="hint">送出後會開一張調撥單給對方。'
+    +  '<b>對方完成調入之前，兩邊的帳都不會動。</b></div>';
+  document.getElementById("pane").innerHTML = h;
+  window.scrollTo(0, 0);
+}
+function reviewIn(entries){
+  var by = {}, order = [];
+  entries.forEach(function(e){
+    if(!by[e.transfer_no]){ by[e.transfer_no] = []; order.push(e.transfer_no); }
+    by[e.transfer_no].push(e);
+  });
+  var h = '<a class="back" href="javascript:void(0)" onclick="back()">← 返回修改</a>';
+  order.forEach(function(no){
+    /* 整張單一項都沒填 ⇒ 這張不會送出，也就不要列出來假裝它會
+       （⛔ 列出來卻不送＝畫面說了一件沒發生的事）。 */
+    var any = by[no].filter(function(e){ return e.qty !== null; }).length;
+    if(!any) return;
+    h += '<div class="rv"><h3>'+esc(by[no][0].from_name)+' 調給你・單號 '+esc(no)+'</h3>';
+    by[no].forEach(function(e){
+      var skip = e.qty === null;
+      var left = skip ? null : (Number(e.want) - Number(e.qty));
+      h += '<div class="l'+(skip ? " skip" : "")+'">'
+        +  '<span class="nm">'+esc(e.name)+'<small>'+esc(e.spec || "")+'</small></span>'
+        +  '<span class="q">'
+        +  (skip ? "未填" : esc(e.qty)+" "+esc(e.unit))
+        +  (skip || left <= 0 ? "" : '<em>短收 '+esc(left)+'</em>')
+        +  (!skip && left < 0 ? '<em>多收 '+esc(-left)+'</em>' : "")
+        +  '</span></div>';
+    });
+    h += '</div>';
+  });
+  h += '<div class="hint"><b>按下「確認送出」的那一刻</b>，這批貨會同時寫進'
+    +  '調出方與你的應收明細（對方 −、你 ＋），金額照上面的實收量算。</div>';
+  document.getElementById("pane").innerHTML = h;
+  window.scrollTo(0, 0);
+}
+
+function back(){
+  MODE = "edit";
+  say("", "");
+  if(TAB === "in"){
+    /* 🔴 先把剛剛填的值寫回 `DATA.incoming[].draft`，再 render ——
+       不寫回去的話，按「返回修改」會把他填的十幾格全部清空，
+       而畫面看起來只是「回到上一頁」（進貨頁同一段）。 */
+    var pos = {};
+    (PENDING || []).forEach(function(e){ pos[e.transfer_no+"|"+e.code] = e.qty; });
+    (DATA.incoming || []).forEach(function(o){
+      o.items.forEach(function(it){
+        var v = pos[o.transfer_no+"|"+it.code];
+        if(v !== undefined) it.draft = v;
+      });
+    });
+  }
+  render();
+}
+
+function act(){
+  var btn = document.getElementById("act");
+  if(MODE === "edit"){
+    PENDING = TAB === "out" ? collectOut() : collectIn();
+    if(TAB === "out"){
+      if(!TO_SEL){ say("warn", "請先選擇要調去哪一間店。"); return; }
+      if(!PENDING.length){ say("warn", "尚未填寫任何調出品項與數量，無法送出。"); return; }
+      say("warn", "請確認以下調撥內容。<b>確認無誤後按「確認送出」開單。</b>");
+      reviewOut(PENDING);
+    } else {
+      if(!PENDING.filter(function(e){ return e.qty !== null; }).length){
+        say("warn", "尚未填寫任何實收數量，無法完成調入。"); return;
+      }
+      say("warn", "請確認以下調入清單。<b>確認無誤後按「確認送出」完成調入。</b>");
+      reviewIn(PENDING);
+    }
+    MODE = "review";
+    btn.textContent = "確認送出";
+    return;
+  }
+  btn.disabled = true; btn.textContent = "送出中…";
+  var p = TAB === "out" ? sendOut() : sendIn();
+  p.then(function(d){
+      if(!d.ok){ throw new Error(d.error || "寫不進去"); }
+      MODE = "edit";
+      if(TAB === "out"){
+        OUTLINES = [{code:"", qty:""}]; TO_SEL = "";
+        say("ok", "調撥單已開立（單號 "+esc(d.transfer_no)+"），共 "+(d.count||0)+" 項。"
+                + "<br>對方完成調入之後才會計入雙方帳款。");
+      } else {
+        say("ok", "調入已完成，應收明細已寫入 "+((d.ar||{}).appended||0)+" 列（雙方各一半）。");
+      }
+      load();                     /* ⛔ 不要只留畫面上的值當「成功」（[[f-actio-green]]） */
+      /* 🔴 送出成功 → 回到 1:1 對話（軒徹 msg25401／25403「回到對話框」）。
+         ⛔ **不可以用 `liff.closeWindow()`**：這一頁不是真 LIFF —— 它是用一般 `uri` action
+            開在 LINE 內建瀏覽器裡的，`liff` 在這裡是 undefined，呼叫下去只會丟例外
+            而且**畫面沒有任何變化**。
+         🔴 用 `https://line.me/R/…`，⛔ 不要用 `line://`：iOS 對自訂 scheme 會跳一個
+            原生確認框（軒徹 23:34 錄影第 17 格實測），等於多一次點擊，而且看起來像出錯。
+         ⏱ 延遲 1.5 秒才跳：立刻跳的話上面那句「已完成」他根本看不到，
+            而送出成功卻什麼都沒看到，跟送出失敗長得一模一樣。 */
+      setTimeout(function(){ location.href = "https://line.me/R/oaMessage/" + BOT_ID; }, 1500);
+    })
+    .catch(function(e){
+      /* 🔴 失敗要**留在確認頁**，⛔ 不可以退回編輯頁：退回去看起來像「我剛剛沒按到」，
+         他會重填一次；留在這裡他才知道是「按了但沒成功」。 */
+      say("bad", "送出失敗：" + esc(e.message) + "　請再次按「確認送出」。");
+    })
+    .then(function(){
+      btn.disabled = false;
+      btn.textContent = MODE === "review" ? "確認送出"
+                      : (TAB === "out" ? "送出調撥" : "完成調入");
+    });
+}
+
+function sendOut(){
+  var qty = {};
+  PENDING.forEach(function(e){ qty[e.code] = e.qty; });
+  return fetch(ENDPOINT+"/transfer-out", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({u:Q_UID, s:Q_SIG, store:DATA.store_no, to:TO_SEL, qty:qty})})
+    .then(function(r){ return r.json(); });
+}
+/* 🔴 調入是**逐單**送的：一張單一次 POST（後端的 `finish` 是以「單」為單位關掉的）。
+   ⛔ 不可以把多張單併成一個請求 —— 那樣其中一張失敗時，另外幾張的狀態會說不清楚。
+   有幾張就發幾次，任何一張失敗就整體報錯（已成功的那幾張是真的成功了，訊息裡講清楚）。 */
+function sendIn(){
+  var by = {};
+  PENDING.forEach(function(e){
+    if(e.qty === null) return;
+    (by[e.transfer_no] = by[e.transfer_no] || []).push({code:e.code, qty:e.qty});
+  });
+  var nos = Object.keys(by), done = [], appended = 0;
+  return nos.reduce(function(chain, no){
+    return chain.then(function(){
+      return fetch(ENDPOINT+"/transfer-in", {method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({u:Q_UID, s:Q_SIG, transfer_no:no, finish:true, entries:by[no]})})
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if(!d.ok){
+            throw new Error(d.error + (done.length ? "（單號 "+done.join("、")+" 已完成）" : ""));
+          }
+          done.push(no); appended += (d.ar || {}).appended || 0;
+        });
+    });
+  }, Promise.resolve()).then(function(){
+    return {ok:true, ar:{appended:appended}, count:done.length};
+  });
+}
+
+load();
+</script>
+</body>
+</html>
