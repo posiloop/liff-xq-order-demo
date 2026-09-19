@@ -207,7 +207,10 @@ function render(){
       +      '<span class="d">'+esc(cal.d)+'</span></span>'
       +    '<span class="sm"><span class="l1">'
       +      (single ? "" : '<span class="store">'+esc(o.store_no+" "+o.store_name)+'</span> ')
-      +      '（'+esc(cal.w)+'）叫貨・'+o.items.length+' 項</span>'
+      +      '（'+esc(cal.w)+'）叫貨</span>'
+      /* 🔴 卡頭**不再印「・n 項」**（軒徹 2026-09-19 msg25358 截圖圈掉兩處）：
+         右邊的 pill 已經是 `filled/total`，總項數在那裡看得到，卡頭再寫一次是同一個數字。
+         ⛔ 不要加回去。（底下「已填 n / m 項」是跨單合計，不是這個數字，留著。） */
       /* 🔴 卡頭**不再印「預估到貨」**（軒徹 2026-09-19 msg25352 截圖圈掉）：
          每一條自己已經有「到貨」欄，卡頭再寫一個「該單最晚那天」只會被讀成
          「整張單都是這天」——而那正好是錯的。⛔ 不要為了「一眼看到最晚哪天」加回去。
