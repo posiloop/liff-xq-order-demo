@@ -53,35 +53,52 @@
   tr:last-child td{border-bottom:0}
   /* 四欄擠在手機上：到貨／品項／叫貨／進貨。品項吃剩下的寬度，其餘三欄固定。
      🔴 ⛔ 不要讓任何一欄用 auto —— 品名長短不一，auto 會讓每張卡的欄位對不齊。 */
-  th.eta,td.eta{width:50px;text-align:center;white-space:nowrap;
+  th.eta,td.eta{width:46px;text-align:center;white-space:nowrap;
                 font-size:12.5px;color:var(--muted);line-height:1.25}
   /* 表頭「預估到貨日」（軒徹 2026-09-19 msg25361）比欄寬長 ⇒ 只有表頭放行斷行，
      斷點寫死成「預估／到貨日」。🔴 ⛔ 不要為了讓它一行放得下就把欄位加寬 ——
      這一欄下面裝的是「9/24」，加寬只是把品名那欄擠掉。 */
-  th.eta{white-space:normal;line-height:1.2;font-size:11.5px}
-  th.num,td.num{text-align:right;white-space:nowrap;width:58px}
-  th.got,td.got{text-align:center;width:116px}
+  /* 🔴 保留 nowrap（繼承上一條）：`<br>` 照樣生效，但**不准再自動斷第三行**。
+     放行 `white-space:normal` 的那一版被斷成「預估／到貨／日」三行，卡頭整個變高。 */
+  th.eta{line-height:1.2;font-size:11.5px}
+  th.num,td.num{text-align:right;white-space:nowrap;width:52px}
+  /* 進貨欄 144px。內容只佔 129＝取消(~36)＋gap4＋input50＋gap4＋全到(~35)，
+     **剩下的 15 是儲存格自己的 padding**（左 4 ＋ 右 10 的 :last-child）。
+     🔴 加「取消」鍵（msg25364）之後原本的 116 裝不下。⛔ 不要靠 flex 壓縮硬塞：
+        `.allbtn{flex:0 0 auto}` 就是為了擋這件事 ⇒ 裝不下時內容會**往左溢出**，
+        蓋在「叫貨」那欄的數字上，**完全不報錯**，看起來只是兩欄疊在一起。
+     📏 實測（forced width 390／360）：取消左緣 238／208，進貨欄左界 233／203 ⇒ 都在界內。 */
+  th.got,td.got{text-align:center;width:144px}
   td:first-child,th:first-child{padding-left:10px}
   td:last-child,th:last-child{padding-right:10px}
-  .gotbox{display:flex;align-items:center;justify-content:flex-end;gap:5px}
+  .gotbox{display:flex;align-items:center;justify-content:flex-end;gap:4px}
   /* 「全到」＝填上與叫貨數量相同的數字（軒徹 msg25341）。
      🔴 flex 子元素預設會被壓縮，手機上按鈕會縮成一條 ⇒ 兩個都要 flex:0 0 auto。 */
   .gotbox input{flex:0 0 auto}
+  /* 🔴 padding／font-size 是**版面預算**，不是美感：390px 寬時
+     eta46 ＋ 品項122 ＋ 叫貨52 ＋ 進貨144 才剛好塞得下（table-layout:fixed，品項吃剩的）。
+     ⛔ 調大之前先量 `getBoundingClientRect()`，別看截圖 —— 兩欄疊在一起不會報錯。 */
   .allbtn{flex:0 0 auto;border:1.5px solid var(--brand);background:#fff;color:var(--brand);
-          border-radius:8px;padding:7px 7px;font-size:12.5px;font-weight:700;line-height:1}
+          border-radius:8px;padding:6px 5px;font-size:11.5px;font-weight:700;line-height:1}
   .allbtn:active{background:var(--brand-soft)}
+  /* 「取消」跟「全到」**不可以長一樣**：一個是填值、一個是清值，
+     兩顆同色同框並排，手指按錯的成本是「剛點完全到又清掉」。⇒ 取消走灰框灰字。 */
+  .allbtn.clr{border-color:var(--line);color:var(--muted);font-weight:600}
+  .allbtn.clr:active{background:#f1f0ee}
   /* 表頭「進貨數量」要**壓在下面那個數字框正上方**（軒徹 2026-09-19 msg25361）。
      🔴 作法是讓表頭跑**同一個 .gotbox flex**，再放一顆看不見的「全到」佔位 ——
         這樣按鈕字級／padding 之後怎麼改，表頭都自己跟著走。
      ⛔ 不要改成 `th.got{text-align:right}` 或寫死 `padding-right:44px`：
         那是拿當下的按鈕寬度算出來的常數，按鈕一改就無聲跑掉（而且看起來還是對齊的）。 */
-  .gothd{flex:0 0 60px;text-align:center}   /* 60px ＝ input[type=number] 的 width */
+  .gothd{flex:0 0 50px;text-align:center}   /* 50px ＝ input[type=number] 的 width，兩者必須一起改 */
   .allbtn.ghost{visibility:hidden}
   .name{font-weight:600}
   /* 規格不斷行：⛔ 不要讓「1Kg/包」被拆成「1Kg/」＋「包」，那個「包」會貼到下一行
      看起來像另一個欄位（叫貨頁同一個坑）。 */
   .spec{color:var(--muted);font-size:12.5px;white-space:nowrap}
-  input[type=number]{width:60px;padding:8px 3px;border:1.5px solid var(--line);border-radius:8px;
+  /* 🔴 font-size 必須 >=16px：iOS Safari 對小於 16px 的輸入框會自動放大整頁。
+     width 要跟 .gothd 的 flex-basis 同值，否則表頭就不在框的正上方了。 */
+  input[type=number]{width:50px;padding:8px 2px;border:1.5px solid var(--line);border-radius:8px;
                      font-size:16px;text-align:center;background:#fff}
   /* 填過的要看得出來——一次十幾條的時候，不標就分不清哪些填過、哪些剛好是 0 */
   input.filled{border-color:var(--ok);background:var(--brand-soft);font-weight:600}
@@ -231,7 +248,9 @@ function render(){
       +    '<span class="chev">▶</span>'
       +  '</summary>'
       +  '<table><thead><tr><th class="eta">預估<br>到貨日</th><th>品項</th><th class="num">叫貨</th>'
-      +  '<th class="got"><span class="gotbox"><span class="gothd">進貨數量</span>'
+      +  '<th class="got"><span class="gotbox">'
+      +  '<span class="allbtn ghost" aria-hidden="true">取消</span>'
+      +  '<span class="gothd">進貨</span>'
       +  '<span class="allbtn ghost" aria-hidden="true">全到</span></span></th>'
       +  '</tr></thead><tbody>';
     o.items.forEach(function(it, ii){
@@ -250,6 +269,7 @@ function render(){
         +  '<div class="spec">'+esc(spec)+'</div></td>'
         +  '<td class="num">'+esc(it.qty)+' '+esc(it.unit)+'</td>'
         +  '<td class="got"><div class="gotbox">'
+        +  '<button type="button" class="allbtn clr" onclick="clearOne('+oi+','+ii+')">取消</button>'
         +  '<input type="number" inputmode="decimal" min="0" step="any"'
         +  ' id="q'+oi+'_'+ii+'" data-qty="'+esc(it.qty)+'" value="'+esc(v)+'"'
         +  ' oninput="mark(this)" placeholder="—">'
@@ -288,6 +308,17 @@ function allIn(oi, ii){
   var el = document.getElementById("q"+oi+"_"+ii);
   if(!el) return;
   el.value = el.getAttribute("data-qty");
+  mark(el);
+}
+
+/* 「取消」＝把這一格清空（軒徹 2026-09-19 msg25364）。
+   🔴 清成 **空字串**，⛔ 不是 0 —— 空＝「還沒填」，0＝「這項一件都沒到」。
+      兩者在收貨現場是不同的事實，而且底欄「已填 n/m」只認空字串。
+   🔴 清完要走 mark()：不重畫的話格子會留著「已填」的綠框／黃框，看起來像還有值。 */
+function clearOne(oi, ii){
+  var el = document.getElementById("q"+oi+"_"+ii);
+  if(!el) return;
+  el.value = "";
   mark(el);
 }
 
