@@ -76,9 +76,11 @@
       <!-- 🔴 2026-09-20 msg25495／25496（他附了 ERP〈門市資訊〉截圖，原話「這些門市都要上」）：
            補上 0000 中轉倉、1001 鴻海、1002 中科、1003 享時蔬，**順序照他截圖＝ERP 門市資訊的順序**
            （⛔ 不是舊版那個配送路線序，2008 因此從 2004 後面移到 2007 後面）。
-           ⚠️ 這張清單是**寫死的**，跟 ERP〈門市資訊〉沒有連線 ⇒ 開新店會再漂一次。
-              要不要改成從後端現撈已問他（msg25497），⛔ 未自行動手：現在純靜態頁沒有後端相依，
-              改成現撈之後「後端掛掉＝選單全空」，失效方向比「清單過期」更糟。 -->
+           🔴 2026-09-20 msg25498「改　要連」⇒ **下面這 12 個 option 已經不是主清單了**，
+              它是 `GET /xq/stores` 連不到時的**備援**（見下方 `loadStores()`）。
+              ⇒ 正常情況下它們一開頁就會被現撈的結果整批換掉；
+              ⛔ 所以**不要再靠手改這裡來新增門市**——改 ERP〈門市資訊〉就會生效。
+              （這份備援本身還是會過期，但過期時頁面會亮警語，不是無聲的。） -->
       <select id="store">
         <option value="">請選擇</option>
         <option value="2001">台北江南店</option>
@@ -94,6 +96,10 @@
         <option value="1002">益循中科店</option>
         <option value="1003">享時蔬台中站前店</option>
       </select>
+      <!-- 連不到後端時才出現。⛔ 不要拿掉：沒有這一行，降級就是靜默的。 -->
+      <div id="storeWarn" style="display:none;margin-top:6px;font-size:13px;color:#b45309;">
+        目前連不到系統，這份店鋪清單可能不是最新的。找不到你的店就先別送，跟採購人員說一聲。
+      </div>
 
       <label for="name">2. 姓名</label>
       <input id="name" type="text" autocomplete="name" placeholder="王曉明">
@@ -203,6 +209,42 @@ var Q_UID = qs("u"), Q_SIG = qs("s");
 var $ = function(id){ return document.getElementById(id); };
 var lineUserId = "";
 var liffReady  = false;
+
+// ─── 店鋪清單現撈（軒徹 2026-09-20 msg25498「改　要連」）────────────────────────
+// 🔴 為什麼還留著 HTML 裡那 12 個 <option>：那是**連不到時的備援**，不是忘了刪。
+//    我在 msg25497 跟他講的代價是「後端掛掉選單會整個空白」，他說要連——
+//    但「要連」跟「連不到就擺爛」是兩件事。備援留著，最壞情況退回今天的行為，不會更糟。
+// 🔴 ⛔ 但**不准靜默退回**：退回時把警語顯示出來。
+//    靜默退回 ＝ 清單悄悄過期，而過期正是這條要修的病 ⇒ 修完卻讓病無聲復發，比沒修還糟。
+// 🔴 只接受「ok 且 stores 是非空陣列」才覆蓋。⛔ 不可用 `j.stores || []` 這種寫法：
+//    後端若哪天回了空陣列，那句會安靜地把選單清空（[[f-nil-to-empty]] 同型）。
+var STORES_URL = "https://hook.aemassinc.net/xq/stores";
+(function loadStores(){
+  var sel = $("store");
+  if (!sel || !window.fetch) return;                 // 舊瀏覽器：留著寫死那份，照樣能用
+  fetch(STORES_URL, { cache: "no-store" })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(j){
+      if (!j || !j.ok || !(j.stores instanceof Array) || !j.stores.length) throw 0;
+      var cur = sel.value;
+      sel.innerHTML = "";
+      var o0 = document.createElement("option");
+      o0.value = ""; o0.textContent = "請選擇";
+      sel.appendChild(o0);
+      for (var i = 0; i < j.stores.length; i++) {
+        var s = j.stores[i];
+        if (!s || !s.no || !s.name) continue;         // 缺格就跳過，不要生出空白選項
+        var o = document.createElement("option");
+        o.value = s.no; o.textContent = s.name;
+        sel.appendChild(o);
+      }
+      sel.value = cur;                                // 撈完把使用者已經選的那家選回來
+    })
+    .catch(function(){
+      var w = $("storeWarn");
+      if (w) w.style.display = "block";               // 看得見的降級，不是靜默
+    });
+})();
 
 if (LIFF_ID && window.liff) {
   try {
