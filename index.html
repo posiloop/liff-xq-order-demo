@@ -217,8 +217,9 @@
 
 <script>
 /* ───────── 品項來源 ─────────────────────────────────────────────────────
-   🔴 沙盒（軒徹 2026-09-16 02:09 msg 24520）：讀的是**副本 ERP** 產的快照，
-      送出寫的是**副本叫貨表**。正式 ERP 與正式叫貨表都不碰。
+   🔴 **正式**（軒徹 2026-09-19 msg25289/25292「把 liff 接上正式檔／你把複製的副本刪除」）：
+      讀的是**正式 ERP**（即時，不吃快取），送出寫的是**正式叫貨紀錄**的「叫貨明細」。
+      ⚠️ 送出去就是真單，會進應收／應付。兩本副本已刪。
    🔴 網址沒帶身分（u/s）時**不抓真資料、也不假裝有資料** —— 退回雛形假品項
       並在橫幅講明。⛔ 不可讓「沒帶身分」長得跟「這家店沒品項」一樣。 */
 var ENDPOINT = "https://hook.aemassinc.net/xq";
@@ -413,7 +414,9 @@ render(); setRole("store");
       document.getElementById("demoNote").style.display="none";
       document.getElementById("dNo").textContent = Q_STORE + todayNo();
       document.getElementById("dNo2").textContent = Q_STORE + todayNo();
-      bar.innerHTML='🧪 <b>沙盒</b>·品項讀自 ERP 副本，送出寫進<b>副本</b>叫貨表，正式表不受影響';
+      /* 2026-09-19 軒徹 msg25289/25292：副本刪除，LIFF 直接作用在正式檔
+         ⇒ 沙盒橫幅整條拿掉（留著就是一句假話）。橫幅本身保留給 alertBar 報錯用。 */
+      bar.style.display="none";
       render();
     })
     .catch(()=>alertBar("連不到後端（下面是假品項，不要用）"));
