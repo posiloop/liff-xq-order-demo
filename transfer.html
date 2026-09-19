@@ -135,6 +135,11 @@
   .rv .l .q{flex:0 0 auto;text-align:right;white-space:nowrap;font-weight:700}
   .rv .l.skip .q{color:var(--muted);font-weight:400}
   .rv .l .q em{display:block;font-style:normal;font-size:12px;font-weight:400;color:var(--warn)}
+  /* 小計／合計列（軒徹 msg25473「畫面上幫補上金額的資訊」）。
+     🔴 底色與 `.rv h3` 同一個 ⇒ 讀起來是「這張卡的收尾」，不是又一個品項列。 */
+  .rv .l.tot{background:#f7f6f4}
+  .rv .l.tot .nm{font-weight:700;color:#444}
+  .rv .l.tot .q em{color:var(--muted)}
 </style>
 </head>
 <body>
@@ -189,6 +194,10 @@ var OUTLINES = [];
 /* 叫貨機器人的 LINE basic ID。與 apply.html／receiving.html 同一個值、同一個來源
    （`GET /v2/bot/info` 實查）。⛔ 三邊分岔的話，其中一邊會把人送去別的帳號而且不會報錯。 */
 var BOT_ID = "@040xpvza";
+/* 送出成功後隔多久跳回 1:1 對話（毫秒）。軒徹 msg25473 問「跳轉速度可以設定嗎」⇒ 抽成這一顆，
+   要改只改這裡。🔴 下限不是 0：立刻跳的話「已完成 / 已寫入 N 列」那句他看不到，
+   而送出成功卻什麼都沒看到，跟送出失敗長得一模一樣（[[f-actio-green]] 同族）。 */
+var BACK_DELAY_MS = 1500;
 
 function esc(s){
   return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
@@ -210,6 +219,16 @@ function ymd(s){
 function money(n){
   if(n === null || n === undefined || n === "") return "";
   return "$" + Number(n).toLocaleString("en-US", {maximumFractionDigits:0});
+}
+/* 調入確認頁專用：**留到分**（軒徹 msg25473「幫補上金額的資訊」）。
+   🔴 為什麼不共用上面那支整數版：調撥單價算得出小數（生鷄肉塊 12 包 / 箱價 2350 → 195.83），
+      逐列四捨五入到元之後相加 **不等於** 小計，也不等於應收明細上的數字 ——
+      他一定會拿這一頁去對帳，而「欄位加不起來」沒有人對得出是哪邊錯
+      （`_price` 檔內同一條規矩：單價×數量≠金額的列不可以產出）。
+   🔴 整數就不顯示 `.00`：`minimumFractionDigits` 不設，只設上限。 */
+function money2(n){
+  if(n === null || n === undefined || n === "") return "";
+  return "$" + Number(n).toLocaleString("en-US", {maximumFractionDigits:2});
 }
 
 function load(){
@@ -476,6 +495,11 @@ function collectIn(){
       /* 空字串 → null＝「還沒填」，⛔ 不是 0。後端會把那一格刪掉，回到未填狀態。 */
       out.push({transfer_no:o.transfer_no, from_name:o.from_name,
                 code:it.code, name:it.name, spec:it.spec, unit:it.unit,
+                /* 🔴 單價**原封帶出來給確認頁顯示用**（軒徹 msg25473「畫面上幫補上金額」）。
+                   ⛔ 前端算出來的金額**不會**送上去 —— `submit()` 只送數量，
+                      金額一律後端用這同一個單價重算（讓使用者決定自己付多少＝不可以）。
+                   ⇒ 這裡的角色是「把後端會算的數字先給他看」，不是「算給後端用」。 */
+                unit_price:it.unit_price,
                 want:(it.outstanding === null || it.outstanding === undefined) ? it.qty : it.outstanding,
                 qty: el.value === "" ? null : el.value});
     });
@@ -508,27 +532,61 @@ function reviewIn(entries){
     by[e.transfer_no].push(e);
   });
   var h = '<a class="back" href="javascript:void(0)" onclick="back()">← 返回修改</a>';
+  var total = 0, totalUnknown = 0;
   order.forEach(function(no){
     /* 整張單一項都沒填 ⇒ 這張不會送出，也就不要列出來假裝它會
        （⛔ 列出來卻不送＝畫面說了一件沒發生的事）。 */
     var any = by[no].filter(function(e){ return e.qty !== null; }).length;
     if(!any) return;
     h += '<div class="rv"><h3>'+esc(by[no][0].from_name)+' 調給你・單號 '+esc(no)+'</h3>';
+    /* 這張單的小計。🔴 只累加**算得出金額**的那幾項；有任何一項算不出來就標記，
+       ⛔ 不可以把算不出來的當 0 加進去 —— 那會生出一個看起來正常、但其實短少的小計。 */
+    var sub = 0, unknown = 0;
     by[no].forEach(function(e){
       var skip = e.qty === null;
       var left = skip ? null : (Number(e.want) - Number(e.qty));
+      /* 金額 ＝ 單價 × 實收量，與後端 `transfer_in` 寫進應收的算式**同一條**
+         （`amount = round(unit_price * qty, 2)`）⇒ 他在這裡看到的就是會進帳的數字。
+         🔴 單價是空的時候顯示「金額待確認」，⛔ 不顯示 $0：
+            後端這種情況也是把金額留白（0 讀起來是「這批免費」）。 */
+      /* 🔴 先去掉千分位逗號再轉數字：表上的單價是字串，實讀有 `'280'` 也有 `'2,880'` 這種。
+            `Number("2,880")` 是 **NaN** ⇒ 不處理的話那一列會變成「金額待確認」，
+            而後端（`_num`）算得出來 ⇒ 畫面與實際入帳不一致。
+            （後端那支的註解寫過同一件事：逗號是表格給的，不是資料本身。） */
+      var up = (e.unit_price === null || e.unit_price === undefined || e.unit_price === "")
+                 ? null : Number(String(e.unit_price).replace(/,/g, ""));
+      /* 🔴 逐列先四捨五入到**分**再相加，與後端 `round(unit_price * qty, 2)` 同一步 ⇒
+            這一頁的小計＝應收明細那幾列加起來的數字，⛔ 不是「差不多」。 */
+      var amt = (skip || up === null || isNaN(up))
+                  ? null : Math.round(up * Number(e.qty) * 100) / 100;
+      if(!skip){ if(amt === null) unknown++; else sub += amt; }
       h += '<div class="l'+(skip ? " skip" : "")+'">'
         +  '<span class="nm">'+esc(e.name)+'<small>'+esc(e.spec || "")+'</small></span>'
         +  '<span class="q">'
         +  (skip ? "未填" : esc(e.qty)+" "+esc(e.unit))
+        +  (skip ? "" : '<em>'+(amt === null ? "金額待確認" : esc(money2(amt)))+'</em>')
         +  (skip || left <= 0 ? "" : '<em>短收 '+esc(left)+'</em>')
         +  (!skip && left < 0 ? '<em>多收 '+esc(-left)+'</em>' : "")
         +  '</span></div>';
     });
+    sub = Math.round(sub * 100) / 100;   /* 浮點累加會生出 1223.4800000000002；先收乾淨再印、再往上加 */
+    h += '<div class="l tot"><span class="nm">小計</span><span class="q">'
+      +  esc(money2(sub))
+      +  (unknown ? '<em>另有 '+unknown+' 項金額待確認</em>' : "")
+      +  '</span></div>';
     h += '</div>';
+    total += sub; totalUnknown += unknown;
   });
-  h += '<div class="hint"><b>按下「確認送出」的那一刻</b>，這批貨會同時寫進'
-    +  '調出方與你的應收明細（對方 −、你 ＋），金額照上面的實收量算。</div>';
+  /* 只有一張單時小計就是全部，再印一次合計是噪音（[[f-xc-dont]] 附了表就別複述表）。 */
+  if(order.length > 1){
+    h += '<div class="rv"><div class="l tot"><span class="nm">合計</span><span class="q">'
+      +  esc(money2(total))
+      +  (totalUnknown ? '<em>另有 '+totalUnknown+' 項金額待確認</em>' : "")
+      +  '</span></div></div>';
+  }
+  /* 軒徹 msg25473：「按下確認送出那一刻」那句整段拿掉。
+     ⛔ 不要改寫成短一點的版本 —— 他說的是「整個拿掉」。
+     底部那行「按下『完成調入』之後，才會寫進兩邊的應收」還在，資訊沒有消失。 */
   document.getElementById("pane").innerHTML = h;
   window.scrollTo(0, 0);
 }
@@ -591,9 +649,10 @@ function act(){
             而且**畫面沒有任何變化**。
          🔴 用 `https://line.me/R/…`，⛔ 不要用 `line://`：iOS 對自訂 scheme 會跳一個
             原生確認框（軒徹 23:34 錄影第 17 格實測），等於多一次點擊，而且看起來像出錯。
-         ⏱ 延遲 1.5 秒才跳：立刻跳的話上面那句「已完成」他根本看不到，
+         ⏱ 延遲 `BACK_DELAY_MS` 才跳（值與理由在檔頭那顆常數上，⛔ 不要在這裡再寫一次秒數
+            —— 兩邊各寫一個數字，改了一邊就會有一句話永遠在說謊）：立刻跳的話上面那句「已完成」他根本看不到，
             而送出成功卻什麼都沒看到，跟送出失敗長得一模一樣。 */
-      setTimeout(function(){ location.href = "https://line.me/R/oaMessage/" + BOT_ID; }, 1500);
+      setTimeout(function(){ location.href = "https://line.me/R/oaMessage/" + BOT_ID; }, BACK_DELAY_MS);
     })
     .catch(function(e){
       /* 🔴 失敗要**留在確認頁**，⛔ 不可以退回編輯頁：退回去看起來像「我剛剛沒按到」，
