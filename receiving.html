@@ -7,12 +7,12 @@
 <style>
   :root{
     --bg:#f5f5f3; --card:#fff; --line:#e0ddd8; --ink:#1c1c1c; --muted:#6b6b6b;
-    --brand:#0f7b3f; --brand-soft:#eef7f1; --ok:#0f7b3f; --bad:#b42318;
+    --brand:#0f7b3f; --brand-soft:#eef7f1; --ok:#0f7b3f; --bad:#b42318; --warn:#b06a00;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   /* 同叫貨頁：連點輸入框不要觸發「連點兩下＝放大」（軒徹 msg24534 回報過）。
      ⛔ 不要改用 maximum-scale／user-scalable=no，那是把整頁縮放關掉。 */
-  button,input{touch-action:manipulation}
+  button,input,summary{touch-action:manipulation}
   html,body{max-width:100%;overflow-x:hidden}
   body{margin:0;background:var(--bg);color:var(--ink);
        font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",system-ui,sans-serif;
@@ -20,38 +20,59 @@
   header{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;
          padding:calc(env(safe-area-inset-top) + 12px) 14px 12px}
   header .t{font-weight:700;font-size:17px}
-  header .t small{display:block;font-weight:400;opacity:.9;font-size:12.5px}
+  header .t small{display:block;font-weight:400;opacity:.92;font-size:12.5px}
   main{padding:12px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
-        padding:12px;margin-bottom:12px}
-  .ordhead{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;margin-bottom:8px}
-  .ordhead .store{font-weight:700;font-size:16px}
-  .ordhead .no{color:var(--muted);font-size:12.5px;font-family:ui-monospace,Menlo,monospace}
-  .dates{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--muted);font-size:13px;
-         border-top:1px dashed var(--line);padding-top:8px;margin-bottom:6px}
-  .dates b{color:var(--ink);font-weight:600}
-  table{width:100%;table-layout:fixed;border-collapse:collapse}
+
+  /* ── 一張單一張卡。卡頭永遠看得到「哪一天、什麼時候到、填了幾項」 ───────── */
+  details.ord{background:var(--card);border:1px solid var(--line);border-radius:12px;
+              margin-bottom:10px;overflow:hidden}
+  details.ord[open]{border-color:#c9d9cf}
+  summary{list-style:none;cursor:pointer;padding:11px 12px;display:flex;
+          align-items:center;gap:10px}
+  summary::-webkit-details-marker{display:none}
+  .cal{flex:0 0 auto;width:46px;text-align:center;border:1px solid var(--line);
+       border-radius:8px;padding:3px 0;background:#faf9f7;line-height:1.15}
+  .cal .m{display:block;font-size:10.5px;color:var(--muted)}
+  .cal .d{display:block;font-size:19px;font-weight:700}
+  .sm{flex:1;min-width:0}
+  .sm .l1{font-weight:700;font-size:14.5px}
+  /* 店名只在「沒選店、一次看全部」時才出現；選了店就在頁首，這裡不重複 */
+  .sm .l1 .store{color:var(--brand);font-weight:700}
+  .sm .l2{color:var(--muted);font-size:12.5px}
+  .pill{flex:0 0 auto;font-size:12px;padding:3px 9px;border-radius:999px;
+        background:#f0efec;color:var(--muted);white-space:nowrap}
+  .pill.part{background:#fff4e5;color:var(--warn)}
+  .pill.done{background:var(--brand-soft);color:var(--ok)}
+  .chev{flex:0 0 auto;color:var(--muted);font-size:12px}
+  details[open] .chev{transform:rotate(90deg)}
+
+  table{width:100%;table-layout:fixed;border-collapse:collapse;border-top:1px solid var(--line)}
   th,td{padding:8px 4px;border-bottom:1px solid var(--line);text-align:left;font-size:14px;
         vertical-align:middle}
-  th{background:#f0efec;font-weight:600;font-size:12.5px;color:#444}
+  th{background:#f7f6f4;font-weight:600;font-size:12.5px;color:#555}
   tr:last-child td{border-bottom:0}
-  th.num,td.num{text-align:right;white-space:nowrap}
-  th.got,td.got{text-align:center;width:88px}
+  th.num,td.num{text-align:right;white-space:nowrap;width:74px}
+  th.got,td.got{text-align:center;width:92px}
+  td:first-child,th:first-child{padding-left:12px}
+  td:last-child,th:last-child{padding-right:12px}
   .name{font-weight:600}
   /* 規格不斷行：⛔ 不要讓「1Kg/包」被拆成「1Kg/」＋「包」，那個「包」會貼到下一行
      看起來像另一個欄位（叫貨頁同一個坑）。 */
   .spec{color:var(--muted);font-size:12.5px;white-space:nowrap}
-  input[type=number]{width:72px;padding:8px 4px;border:1.5px solid var(--line);border-radius:8px;
+  input[type=number]{width:76px;padding:8px 4px;border:1.5px solid var(--line);border-radius:8px;
                      font-size:16px;text-align:center;background:#fff}
-  /* 填過的格子要看得出來——不然逐條收完之後分不清哪些填過、哪些是 0 */
-  input.filled{border-color:var(--ok);background:var(--brand-soft)}
+  /* 填過的要看得出來——一次十幾條的時候，不標就分不清哪些填過、哪些剛好是 0 */
+  input.filled{border-color:var(--ok);background:var(--brand-soft);font-weight:600}
+  /* 數量不等於叫貨量＝短缺或多到，要跳出來。⛔ 不擋，只標：真的就是收到那麼多 */
+  input.diff{border-color:#e0a300;background:#fffaf0}
+
   .bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
        padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);display:flex;gap:10px;align-items:center}
-  .bar .sum{flex:1;min-width:0;font-size:13px;color:var(--muted)}
+  .bar .sum{flex:1;min-width:0;font-size:13px;color:var(--muted);line-height:1.35}
   .bar button{background:var(--brand);color:#fff;border:0;border-radius:10px;
               padding:12px 20px;font-size:16px;font-weight:700}
   .bar button[disabled]{background:#b9b9b9}
-  .msg{padding:14px;border-radius:12px;margin-bottom:12px;font-size:14.5px;line-height:1.7}
+  .msg{padding:13px;border-radius:12px;margin-bottom:12px;font-size:14.5px;line-height:1.7}
   .msg.warn{background:#fff4e5;border:1px solid #f0c98a}
   .msg.bad{background:#fdecea;border:1px solid #f2b5ae;color:var(--bad)}
   .msg.ok{background:var(--brand-soft);border:1px solid #a9d6bc;color:var(--ok)}
@@ -61,7 +82,7 @@
 <body>
 
 <header>
-  <div class="t">📦 進貨
+  <div class="t"><span id="title">📦 進貨</span>
     <small id="sub">載入中…</small>
   </div>
 </header>
@@ -77,22 +98,26 @@
 </div>
 
 <script>
-/* ───────── 進貨頁（軒徹 2026-09-19 msg25331）────────────────────────────────
-   逐字：「核可過的訂單要跑到"進貨"按扭裡 / "進貨"裡面會逐條顯示叫貨的資訊 /
-          排序依 1叫貨日 2.預估到貨日 / 逐條後面幫我設計一個進貨數量」
+/* ───────── 進貨頁（軒徹 msg25331 建，msg25338 改版型）────────────────────────
+   msg25331：「核可過的訂單要跑到"進貨"按扭裡 / 逐條顯示叫貨的資訊 /
+              排序依 1叫貨日 2.預估到貨日 / 逐條後面幫我設計一個進貨數量」
+   msg25338：「進貨按鈕應該也要有一層選店別的　店別按進去就是待進貨清單 /
+              清單上理論上會有很多張叫貨單混雜　所以你的排版要再改一下」
 
+   🔴 **一間店一天就是一張單**（單號＝店號＋YYMMDD）⇒ 單店視角下「很多張單」＝「很多天」。
+      所以版型做成**一天一張可收合的卡**，卡頭永遠看得到：哪一天／什麼時候到／填了幾項。
+      預設只展開最早那一張（最早到貨的最急），其餘收起來 —— 十幾張全展開等於沒有版型。
    🔴 **排序在後端做，這裡原樣照印**（⛔ 不要在前端再排一次）：
-      兩邊各排一次的那天，畫面上的序與後端算出來的序會不一樣，而兩邊都看起來正常。
-   🔴 **沒帶身分（u/s）不抓資料、也不假裝有資料**：直接講「這個網址少了身分」。
-      ⛔ 不可退回假資料 —— 這一頁不是雛形展示頁，填進去的是收貨數量。
-   🔴 「還沒填」與「填 0」是兩件事：沒填送 null（後端會把那格刪掉），
-      填 0 就是「到貨 0 件」。⛔ 不要把空字串當成 0 送出去。 */
+      兩邊各排一次的那天，畫面序與後端序會不一樣，而兩邊都看起來正常。
+   🔴 **沒帶身分（u/s）不抓資料、也不假裝有資料**。⛔ 不可退回假資料 ——
+      這一頁不是雛形展示頁，填進去的是收貨數量。
+   🔴 「還沒填」與「填 0」是兩件事：沒填送 null（後端把那格刪掉），填 0 就是「到貨 0 件」。 */
 var ENDPOINT = "https://hook.aemassinc.net/xq";
 function qs(k){
   var m = new RegExp("[?&]"+k+"=([^&]*)").exec(window.location.search);
   return m ? decodeURIComponent(m[1].replace(/\+/g," ")) : "";
 }
-var Q_UID = qs("u"), Q_SIG = qs("s");
+var Q_UID = qs("u"), Q_SIG = qs("s"), Q_STORE = qs("store");
 var DATA = null;
 
 function esc(s){
@@ -100,8 +125,22 @@ function esc(s){
     return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
   });
 }
-function say(cls, html){ document.getElementById("msg").innerHTML =
-  '<div class="msg '+cls+'">'+html+'</div>'; }
+function say(cls, html){
+  document.getElementById("msg").innerHTML = cls ? '<div class="msg '+cls+'">'+html+'</div>' : "";
+}
+/* "2026-09-18" → {m:"9月", d:"18", w:"四"}。⛔ 不用 new Date("2026-09-18")：
+   那在部分瀏覽器會被當 UTC 解析，日期整個差一天。自己切字串最安全。 */
+var WD = ["日","一","二","三","四","五","六"];
+function ymd(s){
+  var p = String(s || "").split("-");
+  if(p.length !== 3) return {m:"", d:"—", w:""};
+  var dt = new Date(+p[0], +p[1]-1, +p[2]);
+  return {m:(+p[1])+"月", d:String(+p[2]), w:WD[dt.getDay()]};
+}
+function md(s){
+  var p = String(s || "").split("-");
+  return p.length === 3 ? (+p[1])+"/"+(+p[2]) : "—";
+}
 
 function load(){
   if(!Q_UID || !Q_SIG){
@@ -109,12 +148,12 @@ function load(){
     say("warn", "這個網址少了身分資訊，看不到你的單。<br>請回 LINE 重新點一次「<b>進貨</b>」按鈕。");
     return;
   }
-  fetch(ENDPOINT+"/receiving?u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG))
-    .then(function(r){ return r.json(); })
+  var url = ENDPOINT+"/receiving?u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG)
+          + (Q_STORE ? "&store="+encodeURIComponent(Q_STORE) : "");
+  fetch(url).then(function(r){ return r.json(); })
     .then(function(d){
       if(!d.ok){ throw new Error(d.error || "讀不到資料"); }
-      DATA = d;
-      render();
+      DATA = d; say("", ""); render();
     })
     .catch(function(e){
       document.getElementById("sub").textContent = "讀取失敗";
@@ -124,58 +163,89 @@ function load(){
 
 function render(){
   var orders = DATA.orders || [];
+  /* 選了店就把店名放頁首；沒選店（看全部）才在每張卡上標店名，不兩邊都寫 */
+  var single = !!(DATA.store_no);
+  document.getElementById("title").textContent =
+    "📦 " + (single && DATA.store_name ? DATA.store_name : "進貨");
   document.getElementById("sub").textContent =
-    orders.length ? (orders.length + " 張單・" + DATA.count + " 項") : "目前沒有待進貨的單";
+    orders.length ? (orders.length + " 張單待進貨・" + DATA.count + " 項")
+                  : "目前沒有待進貨的單";
+
   if(!orders.length){
     document.getElementById("list").innerHTML =
       '<div class="empty">目前沒有已核可、等著收貨的單。<br>'
       + '叫貨單要先經過核可，才會出現在這裡。</div>';
+    document.getElementById("bar").style.display = "none";
     return;
   }
+
   var h = "";
   orders.forEach(function(o, oi){
-    h += '<div class="card">'
-      +  '<div class="ordhead"><span class="store">'+esc(o.store_name)+'</span>'
-      +  '<span class="no">'+esc(o.order_no)+'</span></div>'
-      +  '<div class="dates"><span>叫貨日 <b>'+esc(o.date)+'</b></span>'
-      +  '<span>預估到貨 <b>'+esc(o.eta || "—")+'</b></span>'
-      +  '<span>'+o.items.length+' 項</span></div>'
-      +  '<table><thead><tr>'
-      +  '<th>品項</th><th class="num" style="width:76px">叫貨</th>'
-      +  '<th class="got">進貨數量</th>'
-      +  '</tr></thead><tbody>';
+    var cal = ymd(o.date);
+    var filled = o.items.filter(function(it){
+      return it.received !== null && it.received !== undefined; }).length;
+    var cls = filled === 0 ? "" : (filled === o.items.length ? "done" : "part");
+    /* 最早那一張預設展開（最早到貨的最急）；其餘收起來 */
+    h += '<details class="ord"'+(oi === 0 ? " open" : "")+'>'
+      +  '<summary>'
+      +    '<span class="cal"><span class="m">'+esc(cal.m)+'</span>'
+      +      '<span class="d">'+esc(cal.d)+'</span></span>'
+      +    '<span class="sm"><span class="l1">'
+      +      (single ? "" : '<span class="store">'+esc(o.store_name)+'</span> ')
+      +      '（'+esc(cal.w)+'）叫貨・'+o.items.length+' 項</span>'
+      +      '<span class="l2">預估到貨 '+esc(md(o.eta))+'　單號 '+esc(o.order_no)+'</span></span>'
+      +    '<span class="pill '+cls+'">'+filled+'/'+o.items.length+'</span>'
+      +    '<span class="chev">▶</span>'
+      +  '</summary>'
+      +  '<table><thead><tr><th>品項</th><th class="num">叫貨</th>'
+      +  '<th class="got">進貨數量</th></tr></thead><tbody>';
     o.items.forEach(function(it, ii){
       var v = (it.received === null || it.received === undefined) ? "" : it.received;
       h += '<tr><td><div class="name">'+esc(it.name)+'</div>'
         +  '<div class="spec">'+esc(it.spec || "")+'</div></td>'
         +  '<td class="num">'+esc(it.qty)+' '+esc(it.unit)+'</td>'
         +  '<td class="got"><input type="number" inputmode="decimal" min="0" step="any"'
-        +  ' id="q'+oi+'_'+ii+'" value="'+esc(v)+'"'
-        +  (v === "" ? "" : ' class="filled"')
+        +  ' id="q'+oi+'_'+ii+'" data-qty="'+esc(it.qty)+'" value="'+esc(v)+'"'
         +  ' oninput="mark(this)" placeholder="—"></td></tr>';
     });
-    h += '</tbody></table></div>';
+    h += '</tbody></table></details>';
   });
   document.getElementById("list").innerHTML = h;
+  /* 初始上色：render 完逐格套一次，⛔ 不要在組 HTML 時算 class ——
+     兩處各算一次就會分岔（改了 mark() 忘了改那邊）。 */
+  (DATA.orders || []).forEach(function(o, oi){
+    o.items.forEach(function(it, ii){
+      var el = document.getElementById("q"+oi+"_"+ii);
+      if(el) paint(el);
+    });
+  });
   document.getElementById("bar").style.display = "flex";
   tally();
 }
 
-function mark(el){
-  el.className = el.value === "" ? "" : "filled";
-  tally();
+function paint(el){
+  var v = el.value;
+  if(v === ""){ el.className = ""; return; }
+  el.className = (Number(v) === Number(el.getAttribute("data-qty"))) ? "filled" : "filled diff";
 }
 
+function mark(el){ paint(el); tally(); }
+
 function tally(){
-  var total = 0, filled = 0;
+  var total = 0, filled = 0, diff = 0;
   (DATA.orders || []).forEach(function(o, oi){
     o.items.forEach(function(it, ii){
       total++;
       var el = document.getElementById("q"+oi+"_"+ii);
-      if(el && el.value !== "") filled++;
+      if(el && el.value !== ""){
+        filled++;
+        if(Number(el.value) !== Number(el.getAttribute("data-qty"))) diff++;
+      }
     });
   });
-  document.getElementById("sum").textContent = "已填 " + filled + " / " + total + " 項";
+  document.getElementById("sum").innerHTML =
+    "已填 <b>"+filled+"</b> / "+total+" 項"
+    + (diff ? '　<span style="color:#b06a00">'+diff+' 項與叫貨量不同</span>' : "");
 }
 
 function save(){
