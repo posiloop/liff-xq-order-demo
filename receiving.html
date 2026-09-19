@@ -188,6 +188,10 @@ function esc(s){
     return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
   });
 }
+/* 叫貨機器人的 LINE basic ID。與 apply.html 同一個值、同一個來源（`GET /v2/bot/info` 實查，
+   displayName「叫貨機器人」）。⛔ 兩邊分岔的話，其中一邊會把人送去別的帳號而且不會報錯。 */
+var BOT_ID = "@040xpvza";
+
 function say(cls, html){
   document.getElementById("msg").innerHTML = cls ? '<div class="msg '+cls+'">'+html+'</div>' : "";
 }
@@ -207,8 +211,8 @@ function md(s){
 
 function load(){
   if(!Q_UID || !Q_SIG){
-    document.getElementById("sub").textContent = "沒有身分";
-    say("warn", "這個網址少了身分資訊，看不到你的單。<br>請回 LINE 重新點一次「<b>進貨</b>」按鈕。");
+    document.getElementById("sub").textContent = "缺少身分資訊";
+    say("warn", "此連結缺少身分資訊，無法顯示進貨清單。<br>請返回 LINE 重新點選「<b>進貨</b>」。");
     return;
   }
   var url = ENDPOINT+"/receiving?u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG)
@@ -220,7 +224,7 @@ function load(){
     })
     .catch(function(e){
       document.getElementById("sub").textContent = "讀取失敗";
-      say("bad", "讀不到進貨清單：" + esc(e.message));
+      say("bad", "進貨清單讀取失敗：" + esc(e.message));
     });
 }
 
@@ -236,7 +240,7 @@ function render(){
              : "進貨");
   document.getElementById("sub").textContent =
     orders.length ? (orders.length + " 張單待進貨・" + DATA.count + " 項")
-                  : "目前沒有待進貨的單";
+                  : "目前無待進貨單據";
 
   if(!orders.length){
     document.getElementById("list").innerHTML =
@@ -441,12 +445,12 @@ function act(){
     PENDING = collect();
     var filled = PENDING.filter(function(e){ return e.qty !== null; }).length;
     if(!filled){
-      say("warn", "一項都沒填，沒有東西可以進貨。");
+      say("warn", "尚未填寫任何進貨數量，無法送出。");
       return;
     }
     MODE = "review";
     btn.textContent = "確認送出";
-    say("warn", "確認下面這張進貨清單。<b>再按一次「確認送出」才會寫進去。</b>");
+    say("warn", "請確認以下進貨清單。<b>確認無誤後按「確認送出」完成登錄。</b>");
     review(PENDING);
     return;
   }
@@ -462,14 +466,26 @@ function act(){
     .then(function(d){
       if(!d.ok){ throw new Error(d.error || "寫不進去"); }
       MODE = "edit";
-      say("ok", "這次進貨完成了，已寫進應收明細（"+(d.full||0)+" 筆）。"
-              + "還沒到的下次打開還會看到。");
+      say("ok", "本次進貨已登錄完成，共 "+(d.full||0)+" 筆。"
+              + "未到貨品項將保留於下次進貨清單。");
       load();                     /* ⛔ 不要只留畫面上的值當「成功」（[[f-actio-green]]） */
+      /* 🔴 送出成功 → 回到 1:1 對話（軒徹 2026-09-19 msg25401／25403「回到對話框」）。
+         ⛔ **不可以用 `liff.closeWindow()`**：這一頁不是真 LIFF —— 它是用一般
+            `uri` action 開在 LINE 內建瀏覽器裡的（`XQ_LIFF_RECEIVING_URL` 是
+            posiloop.github.io 的直連網址，整頁也沒有載 LIFF SDK）。
+            `liff` 在這裡是 undefined，呼叫下去只會丟例外而且**畫面沒有任何變化**。
+         ⇒ 走 `line://` 深連結回機器人的 1:1（四顆圖文選單按鈕就在那）。
+            BOT_ID 與 `apply.html` 同一個來源（`GET /v2/bot/info` 實查），⛔ 不要在這裡另寫一個。
+         ⏱ 延遲 1.5 秒才跳：立刻跳的話上面那句「已登錄完成」他根本看不到，
+            而送出成功卻什麼都沒看到，跟送出失敗長得一模一樣。 */
+      setTimeout(function(){
+        location.href = "https://line.me/R/oaMessage/" + BOT_ID;
+      }, 1500);
     })
     .catch(function(e){
       /* 🔴 失敗要**留在確認頁**，⛔ 不可以退回編輯頁：退回去看起來像「我剛剛沒按到」，
          他會重填一次；留在這裡他才知道是「按了但沒成功」。 */
-      say("bad", "沒有寫進去：" + esc(e.message) + "　再按一次「確認送出」就好。");
+      say("bad", "登錄失敗：" + esc(e.message) + "　請再次按「確認送出」。");
     })
     .then(function(){
       btn.disabled = false;
