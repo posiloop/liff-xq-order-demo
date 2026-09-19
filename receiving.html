@@ -16,7 +16,9 @@
   html,body{max-width:100%;overflow-x:hidden}
   body{margin:0;background:var(--bg);color:var(--ink);
        font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",system-ui,sans-serif;
-       font-size:16px;line-height:1.55;padding-bottom:104px}
+       /* 🔴 底欄改兩排之後變高 ⇒ 這裡要跟著加，⛔ 否則最後一張卡會被底欄蓋住
+          （被蓋住的是「儲存／結束進貨」上面那幾項，而畫面看起來只是「到底了」）。 */
+       font-size:16px;line-height:1.55;padding-bottom:140px}
   header{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;
          padding:calc(env(safe-area-inset-top) + 12px) 14px 12px}
   header .t{font-weight:700;font-size:17px}
@@ -105,12 +107,23 @@
   /* 數量不等於叫貨量＝短缺或多到，要跳出來。⛔ 不擋，只標：真的就是收到那麼多 */
   input.diff{border-color:#e0a300;background:#fffaf0}
 
+  /* 🔴 底欄**兩排**：統計一排、按鈕一排（`flex-wrap` ＋ `.sum` 佔滿整行）。
+     ⛔ 不要塞成一排：加了「結束進貨」之後，一排在 390px 上會把它推出畫面右邊，
+        而且**不會有捲軸也不會報錯**——按鈕就只是不見了。
+     📏 一排時實測：sum 203 ＋ 儲存 63 ＋ 結束進貨 105 ＋ gap20 ＋ padding24 ＝ 415 > 390。 */
   .bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
-       padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);display:flex;gap:10px;align-items:center}
-  .bar .sum{flex:1;min-width:0;font-size:13px;color:var(--muted);line-height:1.35}
+       padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);
+       display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px 10px;align-items:center}
+  .bar .sum{flex:1 1 100%;min-width:0;font-size:13px;color:var(--muted);line-height:1.35}
+  .bar button{flex:0 0 auto}
   .bar button{background:var(--brand);color:#fff;border:0;border-radius:10px;
               padding:12px 20px;font-size:16px;font-weight:700}
   .bar button[disabled]{background:#b9b9b9}
+  /* 「儲存」是次要動作（不動帳）⇒ 白底綠框；「結束進貨」是會出帳那顆 ⇒ 實心綠。
+     ⛔ 兩顆都做成實心綠的話，會出帳的那顆就沒有任何視覺上的重量了。 */
+  .bar button.ghostbtn{background:#fff;color:var(--brand);border:1.5px solid var(--brand);
+                       padding:11px 14px}
+  .bar button.ghostbtn[disabled]{background:#fff;color:#b9b9b9;border-color:#ddd}
   .msg{padding:13px;border-radius:12px;margin-bottom:12px;font-size:14.5px;line-height:1.7}
   .msg.warn{background:#fff4e5;border:1px solid #f0c98a}
   .msg.bad{background:#fdecea;border:1px solid #f2b5ae;color:var(--bad)}
@@ -133,7 +146,12 @@
 
 <div class="bar" id="bar" style="display:none">
   <div class="sum" id="sum"></div>
-  <button id="save" onclick="save()">儲存</button>
+  <!-- 🔴 兩顆鍵語意不同，顏色也不同（軒徹 2026-09-19 msg25373）：
+       「儲存」＝存進度，**不動帳**，灰的。
+       「結束進貨」＝這批收完了，**會寫進應收明細**，綠的。
+       ⛔ 不可以做成一顆：一顆的那天，「我先存一下待會再填」就等於出帳。 -->
+  <button id="save" class="ghostbtn" onclick="save(false)">儲存</button>
+  <button id="fin" onclick="save(true)">結束進貨</button>
 </div>
 
 <script>
@@ -339,8 +357,12 @@ function tally(){
     + (diff ? '　<span style="color:#b06a00">'+diff+' 項與叫貨量不同</span>' : "");
 }
 
-function save(){
-  var btn = document.getElementById("save");
+/* `finish=false` ＝儲存（只存進度）／`finish=true` ＝結束進貨（**會寫應收明細**）。
+   🔴 兩條走**同一支** `save()`：分成兩支的那天，其中一支會漏掉「空字串→null」那條規則，
+      而漏掉的症狀是「沒填的格子被當成 0 收下」。 */
+function save(finish){
+  var btn = document.getElementById(finish ? "fin" : "save");
+  var other = document.getElementById(finish ? "save" : "fin");
   var entries = [];
   (DATA.orders || []).forEach(function(o, oi){
     o.items.forEach(function(it, ii){
@@ -351,20 +373,35 @@ function save(){
                     qty: el.value === "" ? null : el.value});
     });
   });
-  btn.disabled = true; btn.textContent = "儲存中…";
+  /* 🔴 結束是會出帳的動作 ⇒ 沒填滿要**問一句**（軒徹 msg25373「沒填滿可以按結束」）。
+     ⛔ 不可以擋：缺貨就是缺貨，擋住他就沒辦法把這批結掉。只確認，不阻止。
+     ⚠️ 用 confirm() 是唯一會凍住頁面的地方，且只在使用者主動按「結束進貨」時才會出現。 */
+  if(finish){
+    var blank = entries.filter(function(e){ return e.qty === null; }).length;
+    if(blank && !window.confirm("還有 "+blank+" 項沒填。\n沒填的算「這次沒到」，之後還看得到。\n\n確定結束這次進貨？")){
+      return;
+    }
+  }
+  var label = finish ? "結束進貨" : "儲存";
+  btn.disabled = true; other.disabled = true;
+  btn.textContent = finish ? "結束中…" : "儲存中…";
   fetch(ENDPOINT+"/receive", {method:"POST",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({u:Q_UID, s:Q_SIG, entries:entries})})
+        body: JSON.stringify({u:Q_UID, s:Q_SIG, entries:entries, finish: finish === true})})
     .then(function(r){ return r.json(); })
     .then(function(d){
       if(!d.ok){ throw new Error(d.error || "存不進去"); }
-      say("ok", "已儲存。");
+      /* 🔴 兩種動作要講**不一樣的話**：講一樣的話，他分不出剛剛那一下有沒有出帳。 */
+      say("ok", finish
+        ? ("這次進貨結束了。" + (d.full ? "已到齊的 "+d.full+" 項寫進應收明細。" : "沒有到齊的品項，應收明細沒有異動。")
+           + "還沒到的下次打開還會看到。")
+        : "已儲存（只是存起來，還沒結束這次進貨，應收明細沒有異動）。");
       /* 存完重讀 —— ⛔ 不要只把畫面上的值留著當「已儲存」：
          那會在後端其實沒寫進去的時候顯示成功（[[f-actio-green]]）。 */
       load();
     })
-    .catch(function(e){ say("bad", "沒有存進去：" + esc(e.message)); })
-    .then(function(){ btn.disabled = false; btn.textContent = "儲存"; });
+    .catch(function(e){ say("bad", (finish ? "沒有結束成功：" : "沒有存進去：") + esc(e.message)); })
+    .then(function(){ btn.disabled = false; other.disabled = false; btn.textContent = label; });
 }
 
 load();
