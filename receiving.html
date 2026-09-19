@@ -204,7 +204,11 @@ function render(){
       +    '<span class="sm"><span class="l1">'
       +      (single ? "" : '<span class="store">'+esc(o.store_name)+'</span> ')
       +      '（'+esc(cal.w)+'）叫貨・'+o.items.length+' 項</span>'
-      +      '<span class="l2">預估到貨 '+esc(md(o.eta))+'　單號 '+esc(o.order_no)+'</span></span>'
+      /* 🔴 卡頭**不再印「預估到貨」**（軒徹 2026-09-19 msg25352 截圖圈掉）：
+         每一條自己已經有「到貨」欄，卡頭再寫一個「該單最晚那天」只會被讀成
+         「整張單都是這天」——而那正好是錯的。⛔ 不要為了「一眼看到最晚哪天」加回去。
+         `o.eta` 後端照樣回，排序仍然用它（排序鍵不是給人看的東西）。 */
+      +      '<span class="l2">單號 '+esc(o.order_no)+'</span></span>'
       +    '<span class="pill '+cls+'">'+filled+'/'+o.items.length+'</span>'
       +    '<span class="chev">▶</span>'
       +  '</summary>'
