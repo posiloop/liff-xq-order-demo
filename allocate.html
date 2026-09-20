@@ -151,8 +151,9 @@ function render(){
     : "";
   if(!d.rows.length){
     document.getElementById("body").innerHTML =
-      '<div class="card"><div class="empty">今天還沒有要彙整的單。<br>'
-      + '店家送出叫貨、而且過了結單時間之後，這裡才會有東西。</div></div>';
+      '<div class="card"><div class="empty">今天還沒有<b>已核可</b>的 LIFF 叫貨單。<br>'
+      + '店家用 LIFF 送出、而且你核可過之後，這裡才會有東西。</div></div>';
+    document.getElementById("go").disabled = true;
     return;
   }
   /* 逐供應商一張卡：拆單是「跟哪一家買」的決定，同一家的東西要擺在一起才看得出總量。 */
@@ -174,6 +175,13 @@ function render(){
         +     '　配送邏輯：'+esc(r.mode || "（空白）")
         +     (r.unknown_mode ? '<span class="unk">沒設定，先當直送</span>' : "")
         +   '</div>'
+        /* 🔴 倉存要跟「這本帳沒記過」分開講（後端回 null 就是後者）。
+           ⛔ 不可以把 null 印成 0 —— 那會讓他以為倉裡真的空了。 */
+        +   '<div class="sp">中轉倉現有：'
+        +     (r.stock === null || r.stock === undefined
+        +        ? '<span class="unk">這本帳沒記過這個品項</span>'
+        +        : '<b>'+r.stock+'</b> '+esc(r.unit))
+        +   '</div>'
         +   '<div class="in">'
         +     '<span class="lb">直送</span>'
         +     '<input type="number" inputmode="numeric" min="0" id="direct__'+esc(r.key)+'"'
@@ -189,10 +197,21 @@ function render(){
   document.getElementById("body").innerHTML = h;
   d.rows.forEach(function(r){ tally(r.key); });
   document.getElementById("go").disabled = false;
+  /* 🔴 `skipped` / `undated` 是「我沒算進去的東西」，一定要顯示出來。
+     那幾列從畫面上消失時，看起來跟「本來就沒有」一模一樣。 */
+  var notes = [];
   if(d.unknown){
-    say("有 "+d.unknown+" 列在 ERP〈配送邏輯〉沒有設定（空白或 X）。"
-      + "我先當直送算，<b>但那不代表它就是直送</b>，請確認過再送。", "warn");
+    notes.push("有 "+d.unknown+" 列在 ERP〈配送邏輯〉沒有設定（空白或 X）。"
+             + "我先當直送算，<b>但那不代表它就是直送</b>，請確認過再送。");
   }
+  if(d.undated){
+    notes.push("有 "+d.undated+" 張單的日期我讀不懂，<b>沒有算進這一頁</b>。");
+  }
+  if(d.skipped && d.skipped.length){
+    notes.push("下面這 "+d.skipped.length+" 列<b>沒有算進這一頁</b>："
+             + "<ul>"+d.skipped.map(function(s){ return "<li>"+esc(s)+"</li>"; }).join("")+"</ul>");
+  }
+  say(notes.join("<br>"), notes.length ? "warn" : "");
 }
 
 /* 每一列即時對帳。🔴 只改畫面，不擋輸入：
