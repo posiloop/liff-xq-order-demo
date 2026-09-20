@@ -27,6 +27,10 @@
      沒有它，使用者按完看不到帳有變，只能自己猜是「壞了」還是「還沒做」。 */
   .phase{background:#fff7e6;border:1px solid #f0d9a8;color:#7a4b00;border-radius:10px;
          padding:10px 12px;font-size:13px;line-height:1.6;margin-bottom:10px}
+  /* 🔴 示範模式要**一眼看得出來**：示範列跟真列長一樣時，人就會拿示範算出來的
+     數字去做真的採購決定。⛔ 不要為了畫面乾淨把它改成小小一行灰字。 */
+  .demo{background:#fdf2f1;border:1.5px solid var(--bad);color:var(--bad);border-radius:10px;
+        padding:10px 12px;font-size:13.5px;font-weight:700;line-height:1.6;margin-bottom:10px}
 
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
         margin-bottom:10px;overflow:hidden}
@@ -81,6 +85,7 @@
     <b>這一版是「試算」</b>：按下去只會算給你看，<b>不會寫進採購單、調撥明細或應收明細</b>。
     玩過覺得對，再跟我說要不要真的落帳。
   </div>
+  <div id="demo"></div>
   <div id="msg"></div>
   <div id="body"></div>
   <div id="result"></div>
@@ -96,7 +101,7 @@ function qs(k){
   var m = new RegExp("[?&]"+k+"=([^&]*)").exec(window.location.search);
   return m ? decodeURIComponent(m[1].replace(/\+/g," ")) : "";
 }
-var Q_UID = qs("u"), Q_SIG = qs("s"), Q_DAY = qs("day");
+var Q_UID = qs("u"), Q_SIG = qs("s"), Q_DAY = qs("day"), Q_DEMO = (qs("demo") === "1");
 var DATA = null;
 
 function esc(s){
@@ -119,7 +124,8 @@ function load(){
     return;
   }
   var url = ENDPOINT+"/allocate?u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG)
-          + (Q_DAY ? "&day="+encodeURIComponent(Q_DAY) : "");
+          + (Q_DAY ? "&day="+encodeURIComponent(Q_DAY) : "")
+          + (Q_DEMO ? "&demo=1" : "");
   fetch(url).then(function(r){ return r.json(); }).then(function(d){
     /* 🔴 後端回 `ok:false` 是「講得出原因的拒絕」（沒權限／清單變了），
        ⛔ 不要跟網路錯誤混成同一句話：一個是使用者要處理的，一個是我要處理的。 */
@@ -137,6 +143,12 @@ function render(){
   var d = DATA;
   document.getElementById("sub").textContent =
     d.day + "　共 " + d.orders + " 張店家單、" + d.rows.length + " 列";
+  /* 🔴 示範橫幅插在「試算」橫幅**之前**：兩件事要分開講 ——
+     「不會寫進表」是這一版的限制，「數字是假的」是這一次的資料。 */
+  document.getElementById("demo").innerHTML = d.demo
+    ? '<div class="demo">⚠️ 這是<u>示範資料</u>，品項、店名、數量全都是我編的，'
+      + '不是今天真的叫貨單。要看真的把網址後面的 <code>&amp;demo=1</code> 拿掉。</div>'
+    : "";
   if(!d.rows.length){
     document.getElementById("body").innerHTML =
       '<div class="card"><div class="empty">今天還沒有要彙整的單。<br>'
@@ -209,7 +221,9 @@ function preview(){
   btn.disabled = true; btn.textContent = "算…";
   fetch(ENDPOINT+"/allocate-preview", {method:"POST",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({u:Q_UID, s:Q_SIG, day:DATA.day, lines:lines})})
+        /* 🔴 `demo` 跟著送回去，⛔ 不要讓後端從 day 反推 —— 那是拿顯示字串當旗標。 */
+        body: JSON.stringify({u:Q_UID, s:Q_SIG, day:DATA.day,
+                              demo: !!DATA.demo, lines:lines})})
     .then(function(r){ return r.json(); })
     .then(function(d){ showResult(d); })
     .catch(function(e){
