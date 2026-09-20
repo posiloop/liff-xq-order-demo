@@ -88,6 +88,9 @@
   .bar button{width:100%;border:0;border-radius:10px;background:var(--brand);color:#fff;
               font-size:16.5px;font-weight:700;padding:13px}
   .bar button[disabled]{background:#b9c7bf}
+  .bar button + button{margin-top:8px}
+  /* 🔴 送出鈕**故意跟試算鈕不同色**：兩顆一樣的話，按錯的那一顆是不可逆的那一顆。 */
+  .bar button.danger{background:var(--bad)}
   .msg{border-radius:10px;padding:10px 12px;font-size:13.5px;line-height:1.6;margin-bottom:10px}
   .msg.bad{background:#fdf2f1;border:1px solid #f3c9c4;color:var(--bad)}
   .msg.warn{background:#fff7e6;border:1px solid #f0d9a8;color:#7a4b00}
@@ -108,9 +111,14 @@
 </header>
 
 <main>
+  <!-- 🔴 這段是**功能的一部分，不是裝飾**：它界定「按下去會發生什麼」。
+       2026-09-21 軒徹 msg25674「先接起來」之後，這頁有兩顆按鈕、兩種後果，
+       ⛔ 不可以再用舊的那句「按下去只會算給你看」一概而論 —— 那句現在只對「試算」成立。 -->
   <div class="phase">
-    <b>這一版是「試算」</b>：按下去只會算給你看，<b>不會寫進採購單、調撥明細或應收明細</b>。
-    玩過覺得對，再跟我說要不要真的落帳。
+    <b>試算看看</b>：只算給你看，一格都不寫。<br>
+    <b>送出配單</b>：出 PDF（廠商採購單＋中轉調撥單），並把這批單轉成「<b>已核可</b>」
+    ——<b>配單完成就是核可</b>，轉完它們就離開這個待配清單。<br>
+    ⚠️ 採購單總表、調撥明細、應收明細<b>仍然還沒寫</b>，送出後畫面上會逐項告訴你哪幾張沒寫、為什麼。
   </div>
   <div id="demo"></div>
   <div id="msg"></div>
@@ -118,7 +126,13 @@
   <div id="result"></div>
 </main>
 
-<div class="bar"><button id="go" onclick="preview()" disabled>試算看看</button></div>
+<!-- 🔴 送出鈕預設**不存在於可按狀態**，要試算全綠才出現（`showResult` 開它）。
+     ⛔ 不要一開始就給一顆可按的「送出」：後端雖然也會自己擋（`_commit_docs` 先跑一次
+     試算，不 ok 就 raise），但讓人按得下去再被拒絕，等於把「你還沒填對」演成一次失敗。 -->
+<div class="bar">
+  <button id="go" onclick="preview()" disabled>試算看看</button>
+  <button id="commit" class="danger" onclick="commit()" hidden>送出配單（＝核可）</button>
+</div>
 
 <script>
 /* 後端入口。⛔ 與 apply／receiving／transfer 同一個值、同一個來源；
@@ -168,8 +182,10 @@ function load(){
 
 function render(){
   var d = DATA;
+  /* 🔴 印 `day_label` 不印 `day`：不分日期時 `day` 的值是機器用的 "all"，
+     直接印會在標題列出現一個沒人看得懂的英文字。`day` 只負責原樣送回後端。 */
   document.getElementById("sub").textContent =
-    d.day + "　共 " + d.orders + " 張店家單、" + d.rows.length + " 列";
+    (d.day_label || d.day) + "　共 " + d.orders + " 張店家單、" + d.rows.length + " 列";
   /* 🔴 示範橫幅插在「試算」橫幅**之前**：兩件事要分開講 ——
      「不會寫進表」是這一版的限制，「數字是假的」是這一次的資料。 */
   document.getElementById("demo").innerHTML = d.demo
@@ -178,10 +194,17 @@ function render(){
       + '不是今天真的叫貨單。要看真的把網址後面的 <code>&amp;demo=1</code> 拿掉。</div>'
     : "";
   if(!d.rows.length){
+    /* 🔴 這段文案 2026-09-21 改過：舊版寫「你核可過之後這裡才會有東西」，**是錯的**，
+       而且錯的方向最傷 —— 配單本身就是核可（軒徹 msg25666），照舊文案去等一個
+       不存在的核可動作，人就會一直盯著一個永遠不會變的空畫面。
+       ⛔ 不要再把這裡寫成「已核可」。 */
     document.getElementById("body").innerHTML =
-      '<div class="card"><div class="empty">今天還沒有<b>已核可</b>的 LIFF 叫貨單。<br>'
-      + '店家用 LIFF 送出、而且你核可過之後，這裡才會有東西。</div></div>';
+      '<div class="card"><div class="empty">沒有<b>還沒配單</b>的 LIFF 叫貨單。<br>'
+      + '店家用 LIFF 送出之後就會出現在這裡；<b>配完單</b>的會轉成「已核可」並離開這個清單。'
+      + '<br><span class="sp">（網址沒帶 day＝看全部；帶 day=YYYYMMDD＝只看那一天）</span>'
+      + '</div></div>';
     document.getElementById("go").disabled = true;
+    document.getElementById("commit").hidden = true;
     return;
   }
   /* 🔴 兩大區（軒徹 msg25597）：**可拆單**＝中轉倉真的有庫存的；其餘只能決定轉不轉採購。
@@ -288,7 +311,13 @@ function afterRender(d){
     notes.push("有 "+d.unknown+" 列在 ERP〈配送邏輯〉沒有設定（空白或 X），請確認過再送。");
   }
   if(d.undated){
-    notes.push("有 "+d.undated+" 張單的日期我讀不懂，<b>沒有算進這一頁</b>。");
+    /* 🔴 同一個 `undated` 在兩種模式下意思相反，⛔ 不可共用一句文案：
+       指定某一天時它是「無從歸屬所以被排除」；不分日期時它**有**算進來
+       （它確實是一張還沒配單的單）。講錯的那一版會讓他以為有單漏掉而去別處找。 */
+    notes.push(d.day === "all"
+      ? "有 "+d.undated+" 張單的日期我讀不懂，<b>已經算進這一頁</b>（不分日期時不會因為日期把單丟掉）。"
+      : "有 "+d.undated+" 張單的日期我讀不懂，<b>沒有算進這一頁</b>；"
+        + "把網址的 <code>day=</code> 拿掉就看得到它們。");
   }
   if(d.skipped && d.skipped.length){
     notes.push("下面這 "+d.skipped.length+" 列<b>沒有算進這一頁</b>："
@@ -309,6 +338,9 @@ function cell(k, which){
 }
 
 function tally(k){
+  /* 🔴 一改數字就把送出鈕收回去：綠燈是「上一次試算」給的，數字換了那盞燈就過期了。
+     ⛔ 不可以只靠後端擋 —— 後端擋得住錯的，擋不住「他以為他送出的是剛剛看到的那一版」。 */
+  setCommitReady(false);
   var r = DATA.rows.filter(function(x){ return x.key === k; })[0];
   if(!r) return;
   var got = cell(k,"direct") + (r.splittable ? cell(k,"transit") : 0);
@@ -326,13 +358,17 @@ function tally(k){
 
 function round3(n){ return Math.round(n * 1000) / 1000; }
 
-function preview(){
-  var lines = DATA.rows.map(function(r){
+function currentLines(){
+  return DATA.rows.map(function(r){
     return {key: r.key,
             direct: cell(r.key,"direct"),
             /* 不可拆單的列永遠送 0：那些列畫面上根本沒有中轉框。 */
             transit: r.splittable ? cell(r.key,"transit") : 0};
   });
+}
+
+function preview(){
+  var lines = currentLines();
   var btn = document.getElementById("go");
   btn.disabled = true; btn.textContent = "算…";
   fetch(ENDPOINT+"/allocate-preview", {method:"POST",
@@ -348,8 +384,18 @@ function preview(){
     .then(function(){ btn.disabled = false; btn.textContent = "試算看看"; });
 }
 
+/* 🔴 送出鈕的開關只看「這一次試算的結果」，⛔ 不記憶上一次：
+   使用者改了數字沒重算就按送出，送出的會是新數字、而綠燈是舊數字給的。
+   所以每次進 `showResult` 都重設，而且**任何一次改輸入都要再關掉**（見 afterRender）。 */
+function setCommitReady(ok){
+  var b = document.getElementById("commit");
+  b.hidden = !ok;
+  b.disabled = !ok;
+}
+
 function showResult(d){
-  if(d.error){ say(esc(d.error), "bad"); return; }
+  if(d.error){ setCommitReady(false); say(esc(d.error), "bad"); return; }
+  setCommitReady(!!d.ok);
   var h = "";
   /* 🔴 短收自己一格、用橘色：那不是「錯」，是他可能故意的決定（「不轉採購」），
      但後果是店家收不到東西 ⇒ ⛔ 不可以混在其他警告裡一起帶過。 */
@@ -399,6 +445,71 @@ function showResult(d){
         +  ' 列你沒有動過，照 ERP〈配送邏輯〉的預設算。<b>沒動過不等於 0</b>，'
         +  '所以那些量還是有買／有調。</div>';
     }
+  }
+  document.getElementById("result").innerHTML = h;
+  document.getElementById("result").scrollIntoView({behavior:"smooth", block:"start"});
+}
+
+function commit(){
+  /* 🔴 出單是不可逆的（PDF 會寄出去、單會變成已核可）⇒ 送出前**再問一次**。
+     ⛔ 不要用 alert/confirm 以外的自製對話框省事，也⛔ 不要拿掉這一問：
+     這頁唯一一個會改到表的動作就是它。 */
+  var n = (DATA.order_nos || []).length;
+  if(!window.confirm("要送出配單嗎？\n\n會出 PDF，並把這 " + n +
+                     " 張單轉成「已核可」（配單完成＝核可），轉完它們就離開這個清單。")){
+    return;
+  }
+  var btn = document.getElementById("commit");
+  btn.disabled = true; btn.textContent = "出單中…（會花幾十秒，不要重按）";
+  fetch(ENDPOINT+"/allocate-commit", {method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({u:Q_UID, s:Q_SIG, day:DATA.day,
+                              demo: !!DATA.demo, lines:currentLines()})})
+    .then(function(r){ return r.json(); })
+    .then(function(d){ showCommit(d); })
+    .catch(function(e){
+      /* 🔴 連線斷掉時**不可以說「沒出單」**：請求可能已經到後端跑完了。
+         講不確定的事要講成不確定的（[[R2]]：這是關於我這一側偵測的陳述）。 */
+      say("連線中途斷了（"+esc(e.message || e)+"）。<b>我不知道那邊做完了沒有</b>——"
+        + "重新整理這一頁，如果那幾張單不見了就是已經出單成功，不要重按。", "bad");
+    })
+    .then(function(){ btn.textContent = "送出配單（＝核可）"; });
+}
+
+function showCommit(d){
+  if(!d || !d.ok){
+    setCommitReady(true);   /* 失敗＝單還在佇列，讓他改完可以再送 */
+    say(esc((d && d.error) || "出單失敗"), "bad");
+    return;
+  }
+  setCommitReady(false);    /* 成功＝這批已離開佇列，⛔ 不可以讓他再按一次 */
+  var h = "";
+  var ap = d.approved || {};
+  h += '<div class="msg ok"><b>出單完成。</b>'
+    +  (ap.order_nos && ap.order_nos.length
+        ? "這 "+ap.order_nos.length+" 張單（"+ap.order_nos.map(esc).join("、")
+          +"）已轉成<b>已核可</b>，共改了 "+ap.rows+" 列，已離開待配清單。"
+        : "（示範資料，沒有動到任何真的單。）")
+    +  '</div>';
+  h += '<div class="card"><h3><span>產生的單</span></h3>';
+  (d.files || []).forEach(function(f){
+    h += '<table><tbody><tr><td>'+esc(f.kind)+'　<span class="sp">'+esc(f.name)+'</span></td>'
+      +  '<td class="num">'
+      +  (f.url ? '<a href="'+esc(f.url)+'" target="_blank" rel="noopener">開啟</a>'
+                /* 🔴 上傳失敗要講出來，⛔ 不可以給一個空連結假裝成功 */
+                : '<span class="sp">上傳失敗：'+esc(f.upload_error || "不明")+'</span>')
+      +  '</td></tr></tbody></table>';
+  });
+  if(!(d.files || []).length){ h += '<div class="empty">這次沒有產生任何單。</div>'; }
+  h += '</div>';
+  if(d.wrote && d.wrote.length){
+    h += '<div class="msg ok"><b>已經寫進去的：</b><ul>'
+      +  d.wrote.map(function(w){ return "<li>"+esc(w)+"</li>"; }).join("")+'</ul></div>';
+  }
+  /* 🔴 `not_written` **一定要顯示**：看到 PDF 出來，預設的理解就是帳也記了。 */
+  if(d.not_written && d.not_written.length){
+    h += '<div class="msg warn"><b>還沒寫進表的（要知道）：</b><ul>'
+      +  d.not_written.map(function(w){ return "<li>"+esc(w)+"</li>"; }).join("")+'</ul></div>';
   }
   document.getElementById("result").innerHTML = h;
   document.getElementById("result").scrollIntoView({behavior:"smooth", block:"start"});
