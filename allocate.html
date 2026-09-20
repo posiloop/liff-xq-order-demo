@@ -39,13 +39,25 @@
   .card h3 .sup{color:var(--muted);font-weight:600;font-size:12.5px}
   .pad{padding:12px}
 
-  .row{border-top:1px solid var(--line);padding:10px 12px}
-  .row:first-child{border-top:0}
-  .row .hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-  .row .who{font-size:13px;color:var(--muted);font-weight:600}
-  .row .nm{font-weight:700;font-size:15px}
-  .row .sp{font-size:12.5px;color:var(--muted)}
-  .row .in{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+  /* 品項是分組單位（軒徹 msg25615「同品項應該相鄰」）：標頭一次、底下逐店一行。 */
+  .item{border-top:1px solid var(--line)}
+  .item:first-of-type{border-top:0}
+  .item .ih{display:flex;align-items:baseline;gap:8px;padding:9px 12px 0}
+  .item .ih .nm{font-weight:700;font-size:15px}
+  .item .ih .sp{font-size:12.5px;color:var(--muted)}
+  .item .im{font-size:12.5px;color:var(--muted);padding:0 12px 8px}
+  .item .im b{color:var(--ink)}
+
+  /* 一行＝一家店。左：店別　中：叫貨量　右：兩個數字框＋合計。
+     🔴 店別欄固定寬度 ⇒ 上下對齊得起來；店名長度不一時不用固定寬的話，
+        每一行的數字框會各自對在不同位置，整欄就看不成一欄。 */
+  .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+       border-top:1px dashed var(--line);padding:8px 12px}
+  .row .who{font-size:13.5px;font-weight:700;width:96px;flex:0 0 96px}
+  .row .qty{font-size:12.5px;color:var(--muted);width:76px;flex:0 0 76px}
+  .row .qty b{color:var(--ink);font-size:14px}
+  .row .md{font-size:12px;color:var(--muted)}
+  .row .in{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .row .lb{font-size:12.5px;color:var(--muted);font-weight:600}
   /* 🔴 font-size 必須 >=16px：iOS Safari 對小於 16px 的輸入框會自動放大整頁。 */
   input[type=number]{font-size:16px;border:1.5px solid var(--line);border-radius:8px;
@@ -182,52 +194,87 @@ function render(){
   afterRender(d);
 }
 
-/* 一個區塊。`open` ＝預設展開。內層仍逐供應商分組：採購單是按供應商出的，
-   同一家擺在一起才看得出這次總共要跟他買多少。 */
+/* 一個區塊。`open` ＝預設展開。
+   外層逐供應商（採購單是按供應商出的），**內層逐品項**。
+
+   🔴 分組鍵是**品項**，不是店（軒徹 msg25615：「同品項應該相鄰　這樣我才好配」）。
+      ⛔ 不要改回逐店分組 —— 他要做的決定是「這個品項總共 540 包、倉裡 288，
+      哪幾家從倉裡出」，那是一個**跨店**的決定；按店排等於逼他自己在腦袋裡把同一個品項
+      從七個地方撿回來，而超領判定本來就是按品項跨店合計算的。
+   📌 品項資訊（規格／配送邏輯／倉存／各店合計）提到**品項標頭**，逐列就不再重複印一次，
+      這樣每一列才排得成「店別 → 數字」一行（msg25615 的第二句）。 */
 function section(id, title, sub, rows, open){
   if(!rows.length) return "";
-  var bySup = {}, order = [];
+  var bySup = {}, supOrder = [];
   rows.forEach(function(r){
-    if(!bySup[r.supplier_code]){ bySup[r.supplier_code] = []; order.push(r.supplier_code); }
+    if(!bySup[r.supplier_code]){ bySup[r.supplier_code] = []; supOrder.push(r.supplier_code); }
     bySup[r.supplier_code].push(r);
   });
   var h = '<details class="sec" id="sec__'+id+'"'+(open ? " open" : "")+'>'
         + '<summary><b>'+esc(title)+'</b><span class="cnt">'+rows.length+' 列</span>'
         + '<div class="sub">'+esc(sub)+'</div></summary>';
-  order.forEach(function(code){
+  supOrder.forEach(function(code){
     var rs = bySup[code];
     h += '<div class="card"><h3><span>'+esc(rs[0].supplier_name)+'</span>'
       +  '<span class="sup">'+esc(code)+'　'+rs.length+' 列</span></h3>';
-    rs.forEach(function(r){ h += rowHtml(r); });
+    var byItem = {}, itemOrder = [];
+    rs.forEach(function(r){
+      if(!byItem[r.item_code]){ byItem[r.item_code] = []; itemOrder.push(r.item_code); }
+      byItem[r.item_code].push(r);
+    });
+    itemOrder.forEach(function(ic){ h += itemHtml(byItem[ic]); });
     h += '</div>';
   });
   return h + "</details>";
 }
 
-function rowHtml(r){
+/* 一個品項（同一家供應商底下）＝標頭 ＋ 逐店一行。 */
+function itemHtml(rs){
+  var r0 = rs[0];
+  var sum = 0;
+  rs.forEach(function(r){ sum += r.qty; });
   /* 🔴 倉存要跟「這本帳沒記過」分開講（後端回 null 就是後者）。
      ⛔ 不可以把 null 印成 0 —— 那會讓他以為倉裡真的空了。 */
-  var stockTxt = (r.stock === null || r.stock === undefined)
+  var stockTxt = (r0.stock === null || r0.stock === undefined)
       ? '<span class="unk">這本帳沒記過這個品項</span>'
-      : ('<b>'+r.stock+'</b> '+esc(r.unit));
+      : ('中轉倉現有 <b>'+r0.stock+'</b> '+esc(r0.unit));
+  /* 配送邏輯是（供應商 × 店）的屬性 ⇒ 同一個品項底下各店**可能不一樣**。
+     ⛔ 不可以拿第一列的值當成整個品項的值（那會把「代收」印成「中轉」）：
+        一致才提到標頭，不一致就退回逐列印。 */
+  var modes = {}; rs.forEach(function(r){ modes[r.mode || ""] = 1; });
+  var mk = Object.keys(modes), oneMode = (mk.length === 1);
+  var h = '<div class="item">'
+    +   '<div class="ih"><span class="nm">'+esc(r0.name)+'</span>'
+    +     '<span class="sp">'+esc(r0.spec)+'</span></div>'
+    +   '<div class="im">各店合計叫貨 <b>'+sum+'</b> '+esc(r0.unit)
+    +     '　·　'+stockTxt
+    +     (oneMode ? '　·　配送邏輯：'+esc(mk[0] || "（空白）") : "")
+    +   '</div>';
+  rs.forEach(function(r){ h += rowHtml(r, oneMode); });
+  return h + '</div>';
+}
+
+/* 一列＝一家店。版型照採購單：**店別在前、品項資訊在中間（已提到標頭）、數字在後**
+   （軒徹 msg25615）。⛔ 不要把品名塞回這一行 —— 同品項相鄰時，每列再印一次品名
+   會讓「哪裡換品項了」反而看不出來。 */
+function rowHtml(r, modeInHeader){
   var h = '<div class="row" id="row__'+esc(r.key)+'">'
-    +   '<div class="hd"><span class="nm">'+esc(r.name)+'</span>'
-    +     '<span class="who">'+esc(r.store_name)+'</span></div>'
-    +   '<div class="sp">'+esc(r.spec)+'　叫貨 '+r.qty+' '+esc(r.unit)
-    +     '　配送邏輯：'+esc(r.mode || "（空白）")
-    +     (r.unknown_mode ? '<span class="unk">ERP 沒設定</span>' : "")
-    +   '</div>'
-    +   '<div class="sp">中轉倉現有：'+stockTxt+'</div>'
-    +   '<div class="in">'
-    +     '<span class="lb">轉採購</span>'
-    +     '<input type="number" inputmode="decimal" min="0" id="direct__'+esc(r.key)+'"'
-    +       ' value="'+r.direct+'" oninput="tally(\''+esc(r.key)+'\')">';
+    +   '<span class="who">'+esc(r.store_name)+'</span>'
+    +   '<span class="qty">叫貨 <b>'+r.qty+'</b></span>';
+  if(!modeInHeader){
+    h += '<span class="md">'+esc(r.mode || "（空白）")+'</span>';
+  }
+  if(r.unknown_mode){ h += '<span class="unk">ERP 沒設定</span>'; }
+  h += '<span class="in">'
+    +    '<span class="lb">轉採購</span>'
+    +    '<input type="number" inputmode="decimal" min="0" id="direct__'+esc(r.key)+'"'
+    +      ' value="'+r.direct+'" oninput="tally(\''+esc(r.key)+'\')">';
   if(r.splittable){
     h += '<span class="lb">中轉調撥</span>'
       +  '<input type="number" inputmode="decimal" min="0" id="transit__'+esc(r.key)+'"'
       +    ' value="'+r.transit+'" oninput="tally(\''+esc(r.key)+'\')">';
   }
-  return h + '<span class="tally" id="tally__'+esc(r.key)+'"></span></div></div>';
+  return h + '</span><span class="tally" id="tally__'+esc(r.key)+'"></span></div>';
 }
 
 /* 開頁之後要做的收尾：逐列對一次帳、開按鈕、把「我沒算進去的東西」講出來。 */
