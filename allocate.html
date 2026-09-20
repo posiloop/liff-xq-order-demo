@@ -52,7 +52,22 @@
                      background:#fff;padding:9px 2px;width:70px;text-align:center}
   .row.bad input[type=number]{border-color:var(--bad);background:#fdf2f1}
   .tally{font-size:13px;font-weight:700;margin-left:auto}
-  .tally.ok{color:var(--ok)} .tally.bad{color:var(--bad)}
+  .tally.ok{color:var(--ok)} .tally.bad{color:var(--bad)} .tally.short{color:var(--warn)}
+  .row.short input[type=number]{border-color:var(--warn);background:#fff9ee}
+
+  /* 兩大區（軒徹 msg25597）。用 <details> 而不是自己寫展開：
+     鍵盤、螢幕閱讀器、瀏覽器的「頁內尋找」都認得它，自幹的 div 都不認得。 */
+  .sec{margin-bottom:12px}
+  .sec>summary{list-style:none;cursor:pointer;background:var(--card);border:1px solid var(--line);
+               border-radius:12px;padding:11px 12px;font-size:15px}
+  .sec>summary::-webkit-details-marker{display:none}
+  .sec>summary::after{content:"▶";float:right;font-size:12px;color:var(--muted);margin-top:3px}
+  .sec[open]>summary::after{content:"▼"}
+  .sec>summary .cnt{color:var(--muted);font-size:12.5px;font-weight:600;margin-left:8px}
+  .sec>summary .sub{color:var(--muted);font-size:12.5px;font-weight:400;margin-top:2px}
+  .sec[open]>summary{border-radius:12px 12px 0 0;border-bottom:0}
+  .sec .card{border-radius:0;border-top:0;margin-bottom:0}
+  .sec .card:last-child{border-radius:0 0 12px 12px}
   .unk{display:inline-block;background:#fff7e6;border:1px solid #f0d9a8;color:#7a4b00;
        border-radius:6px;font-size:11.5px;padding:1px 6px;margin-left:6px;font-weight:700}
 
@@ -156,53 +171,73 @@ function render(){
     document.getElementById("go").disabled = true;
     return;
   }
-  /* 逐供應商一張卡：拆單是「跟哪一家買」的決定，同一家的東西要擺在一起才看得出總量。 */
+  /* 🔴 兩大區（軒徹 msg25597）：**可拆單**＝中轉倉真的有庫存的；其餘只能決定轉不轉採購。
+     ⛔ 不要把「倉裡沒有」的也給一個中轉輸入框 —— 填得下去卻出不來，比不給更糟。 */
+  var yes = d.rows.filter(function(r){ return r.splittable; });
+  var no  = d.rows.filter(function(r){ return !r.splittable; });
+  document.getElementById("body").innerHTML =
+      section("split", "可拆單", "中轉倉有庫存，可以決定幾包從倉裡出", yes, true)
+    + section("nosplit", "不可拆單", "中轉倉沒有庫存，只能決定轉不轉採購", no, false);
+  afterRender(d);
+}
+
+/* 一個區塊。`open` ＝預設展開。內層仍逐供應商分組：採購單是按供應商出的，
+   同一家擺在一起才看得出這次總共要跟他買多少。 */
+function section(id, title, sub, rows, open){
+  if(!rows.length) return "";
   var bySup = {}, order = [];
-  d.rows.forEach(function(r){
+  rows.forEach(function(r){
     if(!bySup[r.supplier_code]){ bySup[r.supplier_code] = []; order.push(r.supplier_code); }
     bySup[r.supplier_code].push(r);
   });
-  var h = "";
+  var h = '<details class="sec" id="sec__'+id+'"'+(open ? " open" : "")+'>'
+        + '<summary><b>'+esc(title)+'</b><span class="cnt">'+rows.length+' 列</span>'
+        + '<div class="sub">'+esc(sub)+'</div></summary>';
   order.forEach(function(code){
     var rs = bySup[code];
     h += '<div class="card"><h3><span>'+esc(rs[0].supplier_name)+'</span>'
       +  '<span class="sup">'+esc(code)+'　'+rs.length+' 列</span></h3>';
-    rs.forEach(function(r){
-      h += '<div class="row" id="row__'+esc(r.key)+'">'
-        +   '<div class="hd"><span class="nm">'+esc(r.name)+'</span>'
-        +     '<span class="who">'+esc(r.store_name)+'</span></div>'
-        +   '<div class="sp">'+esc(r.spec)+'　叫貨 '+r.qty+' '+esc(r.unit)
-        +     '　配送邏輯：'+esc(r.mode || "（空白）")
-        +     (r.unknown_mode ? '<span class="unk">沒設定，先當直送</span>' : "")
-        +   '</div>'
-        /* 🔴 倉存要跟「這本帳沒記過」分開講（後端回 null 就是後者）。
-           ⛔ 不可以把 null 印成 0 —— 那會讓他以為倉裡真的空了。 */
-        +   '<div class="sp">中轉倉現有：'
-        +     ((r.stock === null || r.stock === undefined)
-               ? '<span class="unk">這本帳沒記過這個品項</span>'
-               : '<b>'+r.stock+'</b> '+esc(r.unit))
-        +   '</div>'
-        +   '<div class="in">'
-        +     '<span class="lb">直送</span>'
-        +     '<input type="number" inputmode="numeric" min="0" id="direct__'+esc(r.key)+'"'
-        +       ' value="'+r.direct+'" oninput="tally(\''+esc(r.key)+'\')">'
-        +     '<span class="lb">中轉倉</span>'
-        +     '<input type="number" inputmode="numeric" min="0" id="transit__'+esc(r.key)+'"'
-        +       ' value="'+r.transit+'" oninput="tally(\''+esc(r.key)+'\')">'
-        +     '<span class="tally" id="tally__'+esc(r.key)+'"></span>'
-        +   '</div></div>';
-    });
+    rs.forEach(function(r){ h += rowHtml(r); });
     h += '</div>';
   });
-  document.getElementById("body").innerHTML = h;
+  return h + "</details>";
+}
+
+function rowHtml(r){
+  /* 🔴 倉存要跟「這本帳沒記過」分開講（後端回 null 就是後者）。
+     ⛔ 不可以把 null 印成 0 —— 那會讓他以為倉裡真的空了。 */
+  var stockTxt = (r.stock === null || r.stock === undefined)
+      ? '<span class="unk">這本帳沒記過這個品項</span>'
+      : ('<b>'+r.stock+'</b> '+esc(r.unit));
+  var h = '<div class="row" id="row__'+esc(r.key)+'">'
+    +   '<div class="hd"><span class="nm">'+esc(r.name)+'</span>'
+    +     '<span class="who">'+esc(r.store_name)+'</span></div>'
+    +   '<div class="sp">'+esc(r.spec)+'　叫貨 '+r.qty+' '+esc(r.unit)
+    +     '　配送邏輯：'+esc(r.mode || "（空白）")
+    +     (r.unknown_mode ? '<span class="unk">ERP 沒設定</span>' : "")
+    +   '</div>'
+    +   '<div class="sp">中轉倉現有：'+stockTxt+'</div>'
+    +   '<div class="in">'
+    +     '<span class="lb">轉採購</span>'
+    +     '<input type="number" inputmode="decimal" min="0" id="direct__'+esc(r.key)+'"'
+    +       ' value="'+r.direct+'" oninput="tally(\''+esc(r.key)+'\')">';
+  if(r.splittable){
+    h += '<span class="lb">中轉調撥</span>'
+      +  '<input type="number" inputmode="decimal" min="0" id="transit__'+esc(r.key)+'"'
+      +    ' value="'+r.transit+'" oninput="tally(\''+esc(r.key)+'\')">';
+  }
+  return h + '<span class="tally" id="tally__'+esc(r.key)+'"></span></div></div>';
+}
+
+/* 開頁之後要做的收尾：逐列對一次帳、開按鈕、把「我沒算進去的東西」講出來。 */
+function afterRender(d){
   d.rows.forEach(function(r){ tally(r.key); });
-  document.getElementById("go").disabled = false;
+  document.getElementById("go").disabled = !d.rows.length;
   /* 🔴 `skipped` / `undated` 是「我沒算進去的東西」，一定要顯示出來。
      那幾列從畫面上消失時，看起來跟「本來就沒有」一模一樣。 */
   var notes = [];
   if(d.unknown){
-    notes.push("有 "+d.unknown+" 列在 ERP〈配送邏輯〉沒有設定（空白或 X）。"
-             + "我先當直送算，<b>但那不代表它就是直送</b>，請確認過再送。");
+    notes.push("有 "+d.unknown+" 列在 ERP〈配送邏輯〉沒有設定（空白或 X），請確認過再送。");
   }
   if(d.undated){
     notes.push("有 "+d.undated+" 張單的日期我讀不懂，<b>沒有算進這一頁</b>。");
@@ -216,25 +251,39 @@ function render(){
 
 /* 每一列即時對帳。🔴 只改畫面，不擋輸入：
    擋住輸入的話使用者沒辦法「先填一邊再填另一邊」，中間狀態本來就會不相等。 */
+function cell(k, which){
+  /* 不可拆單那些列**沒有**中轉那個框。⛔ 不要用 `.value` 硬讀 —— 讀 null 會丟例外，
+     而這支綁在 oninput 上，丟了例外就是「打字沒反應」而且 console 以外看不到。 */
+  var e = rowEl(k, which);
+  if(!e) return 0;
+  var v = parseFloat(e.value);
+  return isNaN(v) ? 0 : v;
+}
+
 function tally(k){
   var r = DATA.rows.filter(function(x){ return x.key === k; })[0];
   if(!r) return;
-  var a = parseInt(rowEl(k,"direct").value || "0", 10);
-  var b = parseInt(rowEl(k,"transit").value || "0", 10);
-  if(isNaN(a)) a = 0;
-  if(isNaN(b)) b = 0;
+  var got = cell(k,"direct") + (r.splittable ? cell(k,"transit") : 0);
   var t = document.getElementById("tally__"+k), row = document.getElementById("row__"+k);
-  var ok = (a + b === r.qty);
-  t.className = "tally " + (ok ? "ok" : "bad");
-  t.textContent = ok ? ("＝ " + r.qty) : (a + b) + " / " + r.qty;
-  row.className = "row" + (ok ? "" : " bad");
+  /* 🔴 三態，不是兩態（軒徹 msg25597「轉 or 不轉採購」）：
+     少於叫貨量是**他可能故意的**，所以不是紅色的錯，而是橘色的「這家店會短收」；
+     多於叫貨量才是紅色。兩態的話「他故意少買」跟「他打錯」會長成同一個顏色。 */
+  var state = (Math.abs(got - r.qty) < 0.001) ? "ok" : (got > r.qty ? "bad" : "short");
+  t.className = "tally " + state;
+  t.textContent = state === "ok" ? ("＝ " + r.qty)
+                : state === "bad" ? (got + " / " + r.qty + "　太多")
+                : (got + " / " + r.qty + "　短 " + round3(r.qty - got));
+  row.className = "row" + (state === "bad" ? " bad" : (state === "short" ? " short" : ""));
 }
+
+function round3(n){ return Math.round(n * 1000) / 1000; }
 
 function preview(){
   var lines = DATA.rows.map(function(r){
     return {key: r.key,
-            direct: parseInt(rowEl(r.key,"direct").value || "0", 10) || 0,
-            transit: parseInt(rowEl(r.key,"transit").value || "0", 10) || 0};
+            direct: cell(r.key,"direct"),
+            /* 不可拆單的列永遠送 0：那些列畫面上根本沒有中轉框。 */
+            transit: r.splittable ? cell(r.key,"transit") : 0};
   });
   var btn = document.getElementById("go");
   btn.disabled = true; btn.textContent = "算…";
@@ -254,12 +303,22 @@ function preview(){
 function showResult(d){
   if(d.error){ say(esc(d.error), "bad"); return; }
   var h = "";
-  if(d.warnings && d.warnings.length){
+  /* 🔴 短收自己一格、用橘色：那不是「錯」，是他可能故意的決定（「不轉採購」），
+     但後果是店家收不到東西 ⇒ ⛔ 不可以混在其他警告裡一起帶過。 */
+  if(d.shortfalls && d.shortfalls.length){
+    h += '<div class="msg warn"><b>這幾列有東西沒有來源，店家會短收：</b><ul>'
+      +  d.shortfalls.map(function(w){ return "<li>"+esc(w)+"</li>"; }).join("")
+      +  '</ul>確定是故意的就繼續，不是的話把數字補回去。</div>';
+  }
+  var rest = (d.warnings || []).filter(function(w){
+    return (d.shortfalls || []).indexOf(w) < 0;   /* 短收已經單獨列過，不重複 */
+  });
+  if(rest.length){
     h += '<div class="msg '+(d.ok ? "warn" : "bad")+'">'
       /* 🔴 標題不要寫死成「數字兜不攏」：擋人的原因不只一種（兜不攏、中轉倉超領、
          倉裡沒記過這個品項…）。把所有原因講成同一個，人就會照著那句話去找錯的地方。 */
       +  (d.ok ? "算出來了，但有幾件要你確認：" : "<b>還不能送</b>，下面這幾件要先處理：")
-      +  "<ul>" + d.warnings.map(function(w){ return "<li>"+esc(w)+"</li>"; }).join("") + "</ul>"
+      +  "<ul>" + rest.map(function(w){ return "<li>"+esc(w)+"</li>"; }).join("") + "</ul>"
       +  '</div>';
   }
   if(d.ok){
