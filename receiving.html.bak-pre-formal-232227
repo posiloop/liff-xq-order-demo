@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>享奇雞 進貨</title>
+<style>
+  :root{
+    --bg:#f5f5f3; --card:#fff; --line:#e0ddd8; --ink:#1c1c1c; --muted:#6b6b6b;
+    --brand:#0f7b3f; --brand-soft:#eef7f1; --ok:#0f7b3f; --bad:#b42318; --warn:#b06a00;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  /* 同叫貨頁：連點輸入框不要觸發「連點兩下＝放大」（軒徹 msg24534 回報過）。
+     ⛔ 不要改用 maximum-scale／user-scalable=no，那是把整頁縮放關掉。 */
+  button,input,summary{touch-action:manipulation}
+  html,body{max-width:100%;overflow-x:hidden}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",system-ui,sans-serif;
+       /* 🔴 底欄改兩排之後變高 ⇒ 這裡要跟著加，⛔ 否則最後一張卡會被底欄蓋住
+          （被蓋住的是「儲存／結束進貨」上面那幾項，而畫面看起來只是「到底了」）。 */
+       font-size:16px;line-height:1.55;padding-bottom:140px}
+  header{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;
+         padding:calc(env(safe-area-inset-top) + 12px) 14px 12px}
+  header .t{font-weight:700;font-size:17px}
+  header .t small{display:block;font-weight:400;opacity:.92;font-size:12.5px}
+  main{padding:12px}
+
+  /* ── 一張單一張卡。卡頭永遠看得到「哪一天、什麼時候到、填了幾項」 ───────── */
+  details.ord{background:var(--card);border:1px solid var(--line);border-radius:12px;
+              margin-bottom:10px;overflow:hidden}
+  details.ord[open]{border-color:#c9d9cf}
+  summary{list-style:none;cursor:pointer;padding:11px 12px;display:flex;
+          align-items:center;gap:10px}
+  summary::-webkit-details-marker{display:none}
+  .cal{flex:0 0 auto;width:46px;text-align:center;border:1px solid var(--line);
+       border-radius:8px;padding:3px 0;background:#faf9f7;line-height:1.15}
+  .cal .m{display:block;font-size:10.5px;color:var(--muted)}
+  .cal .d{display:block;font-size:19px;font-weight:700}
+  .sm{flex:1;min-width:0}
+  .sm .l1{font-weight:700;font-size:14.5px}
+  /* 店名只在「沒選店、一次看全部」時才出現；選了店就在頁首，這裡不重複 */
+  .sm .l1 .store{color:var(--brand);font-weight:700}
+  .sm .l2{color:var(--muted);font-size:12.5px}
+  .pill{flex:0 0 auto;font-size:12px;padding:3px 9px;border-radius:999px;
+        background:#f0efec;color:var(--muted);white-space:nowrap}
+  .pill.part{background:#fff4e5;color:var(--warn)}
+  .pill.done{background:var(--brand-soft);color:var(--ok)}
+  .chev{flex:0 0 auto;color:var(--muted);font-size:12px}
+  details[open] .chev{transform:rotate(90deg)}
+
+  table{width:100%;table-layout:fixed;border-collapse:collapse;border-top:1px solid var(--line)}
+  th,td{padding:8px 4px;border-bottom:1px solid var(--line);text-align:left;font-size:14px;
+        vertical-align:middle}
+  th{background:#f7f6f4;font-weight:600;font-size:12.5px;color:#555}
+  tr:last-child td{border-bottom:0}
+  /* 四欄擠在手機上：到貨／品項／叫貨／進貨。品項吃剩下的寬度，其餘三欄固定。
+     🔴 ⛔ 不要讓任何一欄用 auto —— 品名長短不一，auto 會讓每張卡的欄位對不齊。 */
+  th.eta,td.eta{width:46px;text-align:center;white-space:nowrap;
+                font-size:12.5px;color:var(--muted);line-height:1.25}
+  /* 表頭「預估到貨日」（軒徹 2026-09-19 msg25361）比欄寬長 ⇒ 只有表頭放行斷行，
+     斷點寫死成「預估／到貨日」。🔴 ⛔ 不要為了讓它一行放得下就把欄位加寬 ——
+     這一欄下面裝的是「9/24」，加寬只是把品名那欄擠掉。 */
+  /* 🔴 保留 nowrap（繼承上一條）：`<br>` 照樣生效，但**不准再自動斷第三行**。
+     放行 `white-space:normal` 的那一版被斷成「預估／到貨／日」三行，卡頭整個變高。 */
+  th.eta{line-height:1.2;font-size:11.5px}
+  th.num,td.num{text-align:right;white-space:nowrap;width:52px}
+  /* 進貨欄 144px。內容只佔 129＝取消(~36)＋gap4＋input50＋gap4＋全到(~35)，
+     **剩下的 15 是儲存格自己的 padding**（左 4 ＋ 右 10 的 :last-child）。
+     🔴 加「取消」鍵（msg25364）之後原本的 116 裝不下。⛔ 不要靠 flex 壓縮硬塞：
+        `.allbtn{flex:0 0 auto}` 就是為了擋這件事 ⇒ 裝不下時內容會**往左溢出**，
+        蓋在「叫貨」那欄的數字上，**完全不報錯**，看起來只是兩欄疊在一起。
+     📏 實測（forced width 390／360）：取消左緣 238／208，進貨欄左界 233／203 ⇒ 都在界內。 */
+  th.got,td.got{text-align:center;width:144px}
+  td:first-child,th:first-child{padding-left:10px}
+  td:last-child,th:last-child{padding-right:10px}
+  .gotbox{display:flex;align-items:center;justify-content:flex-end;gap:4px}
+  /* 「全到」＝填上與叫貨數量相同的數字（軒徹 msg25341）。
+     🔴 flex 子元素預設會被壓縮，手機上按鈕會縮成一條 ⇒ 兩個都要 flex:0 0 auto。 */
+  .gotbox input{flex:0 0 auto}
+  /* 🔴 padding／font-size 是**版面預算**，不是美感：390px 寬時
+     eta46 ＋ 品項122 ＋ 叫貨52 ＋ 進貨144 才剛好塞得下（table-layout:fixed，品項吃剩的）。
+     ⛔ 調大之前先量 `getBoundingClientRect()`，別看截圖 —— 兩欄疊在一起不會報錯。 */
+  .allbtn{flex:0 0 auto;border:1.5px solid var(--brand);background:#fff;color:var(--brand);
+          border-radius:8px;padding:6px 5px;font-size:11.5px;font-weight:700;line-height:1}
+  .allbtn:active{background:var(--brand-soft)}
+  /* 「取消」跟「全到」**不可以長一樣**：一個是填值、一個是清值，
+     兩顆同色同框並排，手指按錯的成本是「剛點完全到又清掉」。⇒ 取消走灰框灰字。 */
+  .allbtn.clr{border-color:var(--line);color:var(--muted);font-weight:600}
+  .allbtn.clr:active{background:#f1f0ee}
+  /* 表頭「進貨數量」要**壓在下面那個數字框正上方**（軒徹 2026-09-19 msg25361）。
+     🔴 作法是讓表頭跑**同一個 .gotbox flex**，再放一顆看不見的「全到」佔位 ——
+        這樣按鈕字級／padding 之後怎麼改，表頭都自己跟著走。
+     ⛔ 不要改成 `th.got{text-align:right}` 或寫死 `padding-right:44px`：
+        那是拿當下的按鈕寬度算出來的常數，按鈕一改就無聲跑掉（而且看起來還是對齊的）。 */
+  .gothd{flex:0 0 50px;text-align:center}   /* 50px ＝ input[type=number] 的 width，兩者必須一起改 */
+  .allbtn.ghost{visibility:hidden}
+  .name{font-weight:600}
+  /* 規格不斷行：⛔ 不要讓「1Kg/包」被拆成「1Kg/」＋「包」，那個「包」會貼到下一行
+     看起來像另一個欄位（叫貨頁同一個坑）。 */
+  .spec{color:var(--muted);font-size:12.5px;white-space:nowrap}
+  /* 🔴 font-size 必須 >=16px：iOS Safari 對小於 16px 的輸入框會自動放大整頁。
+     width 要跟 .gothd 的 flex-basis 同值，否則表頭就不在框的正上方了。 */
+  input[type=number]{width:50px;padding:8px 2px;border:1.5px solid var(--line);border-radius:8px;
+                     font-size:16px;text-align:center;background:#fff}
+  /* 填過的要看得出來——一次十幾條的時候，不標就分不清哪些填過、哪些剛好是 0 */
+  input.filled{border-color:var(--ok);background:var(--brand-soft);font-weight:600}
+  /* 數量不等於叫貨量＝短缺或多到，要跳出來。⛔ 不擋，只標：真的就是收到那麼多 */
+  input.diff{border-color:#e0a300;background:#fffaf0}
+
+  /* 🔴 底欄**兩排**：統計一排、按鈕一排（`flex-wrap` ＋ `.sum` 佔滿整行）。
+     ⛔ 不要塞成一排：加了「結束進貨」之後，一排在 390px 上會把它推出畫面右邊，
+        而且**不會有捲軸也不會報錯**——按鈕就只是不見了。
+     📏 一排時實測：sum 203 ＋ 儲存 63 ＋ 結束進貨 105 ＋ gap20 ＋ padding24 ＝ 415 > 390。 */
+  .bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
+       padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);
+       display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px 10px;align-items:center}
+  .bar .sum{flex:1 1 100%;min-width:0;font-size:13px;color:var(--muted);line-height:1.35}
+  .bar button{flex:0 0 auto}
+  .bar button{background:var(--brand);color:#fff;border:0;border-radius:10px;
+              padding:12px 20px;font-size:16px;font-weight:700}
+  .bar button[disabled]{background:#b9b9b9}
+  .msg{padding:13px;border-radius:12px;margin-bottom:12px;font-size:14.5px;line-height:1.7}
+  .msg.warn{background:#fff4e5;border:1px solid #f0c98a}
+  .msg.bad{background:#fdecea;border:1px solid #f2b5ae;color:var(--bad)}
+  .msg.ok{background:var(--brand-soft);border:1px solid #a9d6bc;color:var(--ok)}
+  .empty{color:var(--muted);text-align:center;padding:40px 16px;line-height:1.8}
+  /* ── 第二段：確認用的「進貨清單」（msg25379）───────────────────────────── */
+  .back{display:inline-block;margin-bottom:10px;color:var(--brand);font-weight:700;font-size:14px}
+  .rv{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+      margin-bottom:10px}
+  .rv h3{font-size:14.5px;padding:11px 12px;background:#f7f6f4;color:#444;font-weight:700}
+  .rv .ln{display:flex;gap:8px;padding:9px 12px;border-top:1px solid var(--line);font-size:14px}
+  .rv .ln .nm{flex:1;min-width:0}
+  .rv .ln .nm small{display:block;color:var(--muted);font-size:12px}
+  .rv .ln .q{flex:0 0 auto;text-align:right;white-space:nowrap;font-weight:700}
+  /* 沒填的也列出來 ⛔ 不可以只列有填的：「漏了一項」正是要在這一頁被看見的東西 */
+  .rv .ln.skip .q{color:var(--muted);font-weight:400}
+  .rv .ln .q em{display:block;font-style:normal;font-size:12px;font-weight:400;color:var(--warn)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="t"><span id="title">📦 進貨</span>
+    <small id="sub">載入中…</small>
+  </div>
+</header>
+
+<main>
+  <div id="msg"></div>
+  <div id="list"></div>
+</main>
+
+<div class="bar" id="bar" style="display:none">
+  <div class="sum" id="sum"></div>
+  <!-- 🔴 **一顆鍵 ＋ 兩段確認**（軒徹 2026-09-19 msg25379：
+       「下方只需要有一個按鍵／點了就跑出一張進貨清單／再按一次確認完成了」）。
+       ⛔ 不要改回兩顆：msg25373 那版的「儲存／結束進貨」已被這則推翻。
+       ⛔ 也不要把兩段併成一段：**第二段才寫應收明細**，沒有那一段就等於按一下就出帳。 -->
+  <button id="act" onclick="act()">完成進貨</button>
+</div>
+
+<script>
+/* ───────── 進貨頁（軒徹 msg25331 建，msg25338 改版型）────────────────────────
+   msg25331：「核可過的訂單要跑到"進貨"按扭裡 / 逐條顯示叫貨的資訊 /
+              排序依 1叫貨日 2.預估到貨日 / 逐條後面幫我設計一個進貨數量」
+   msg25338：「進貨按鈕應該也要有一層選店別的　店別按進去就是待進貨清單 /
+              清單上理論上會有很多張叫貨單混雜　所以你的排版要再改一下」
+
+   🔴 **一間店一天就是一張單**（單號＝店號＋YYMMDD）⇒ 單店視角下「很多張單」＝「很多天」。
+      所以版型做成**一天一張可收合的卡**，卡頭永遠看得到：哪一天／什麼時候到／填了幾項。
+      預設只展開最早那一張（最早到貨的最急），其餘收起來 —— 十幾張全展開等於沒有版型。
+   🔴 **排序在後端做，這裡原樣照印**（⛔ 不要在前端再排一次）：
+      兩邊各排一次的那天，畫面序與後端序會不一樣，而兩邊都看起來正常。
+   🔴 **沒帶身分（u/s）不抓資料、也不假裝有資料**。⛔ 不可退回假資料 ——
+      這一頁不是雛形展示頁，填進去的是收貨數量。
+   🔴 「還沒填」與「填 0」是兩件事：沒填送 null（後端把那格刪掉），填 0 就是「到貨 0 件」。 */
+var ENDPOINT = "https://hook.aemassinc.net/xq";
+function qs(k){
+  var m = new RegExp("[?&]"+k+"=([^&]*)").exec(window.location.search);
+  return m ? decodeURIComponent(m[1].replace(/\+/g," ")) : "";
+}
+var Q_UID = qs("u"), Q_SIG = qs("s"), Q_STORE = qs("store");
+var DATA = null;
+
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
+  });
+}
+function say(cls, html){
+  document.getElementById("msg").innerHTML = cls ? '<div class="msg '+cls+'">'+html+'</div>' : "";
+}
+/* "2026-09-18" → {m:"9月", d:"18", w:"四"}。⛔ 不用 new Date("2026-09-18")：
+   那在部分瀏覽器會被當 UTC 解析，日期整個差一天。自己切字串最安全。 */
+var WD = ["日","一","二","三","四","五","六"];
+function ymd(s){
+  var p = String(s || "").split("-");
+  if(p.length !== 3) return {m:"", d:"—", w:""};
+  var dt = new Date(+p[0], +p[1]-1, +p[2]);
+  return {m:(+p[1])+"月", d:String(+p[2]), w:WD[dt.getDay()]};
+}
+function md(s){
+  var p = String(s || "").split("-");
+  return p.length === 3 ? (+p[1])+"/"+(+p[2]) : "—";
+}
+
+function load(){
+  if(!Q_UID || !Q_SIG){
+    document.getElementById("sub").textContent = "沒有身分";
+    say("warn", "這個網址少了身分資訊，看不到你的單。<br>請回 LINE 重新點一次「<b>進貨</b>」按鈕。");
+    return;
+  }
+  var url = ENDPOINT+"/receiving?u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG)
+          + (Q_STORE ? "&store="+encodeURIComponent(Q_STORE) : "");
+  fetch(url).then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok){ throw new Error(d.error || "讀不到資料"); }
+      DATA = d; say("", ""); render();
+    })
+    .catch(function(e){
+      document.getElementById("sub").textContent = "讀取失敗";
+      say("bad", "讀不到進貨清單：" + esc(e.message));
+    });
+}
+
+function render(){
+  var orders = DATA.orders || [];
+  /* 選了店就把店名放頁首；沒選店（看全部）才在每張卡上標店名，不兩邊都寫 */
+  var single = !!(DATA.store_no);
+  /* 店名前面掛店號（軒徹 msg25354）。🔴 兩者都從**後端回的那張單**來，
+     ⛔ 不從網址上的 `store` 拼——網址在使用者手上，拼出來的號碼可能根本不是這張單的店。 */
+  document.getElementById("title").textContent =
+    "📦 " + (single && DATA.store_name
+             ? (DATA.store_no ? DATA.store_no + " " : "") + DATA.store_name
+             : "進貨");
+  document.getElementById("sub").textContent =
+    orders.length ? (orders.length + " 張單待進貨・" + DATA.count + " 項")
+                  : "目前沒有待進貨的單";
+
+  if(!orders.length){
+    document.getElementById("list").innerHTML =
+      '<div class="empty">目前沒有已核可、等著收貨的單。<br>'
+      + '叫貨單要先經過核可，才會出現在這裡。</div>';
+    document.getElementById("bar").style.display = "none";
+    return;
+  }
+
+  var h = "";
+  orders.forEach(function(o, oi){
+    var cal = ymd(o.date);
+    var filled = o.items.filter(function(it){
+      return it.received !== null && it.received !== undefined; }).length;
+    var cls = filled === 0 ? "" : (filled === o.items.length ? "done" : "part");
+    /* 最早那一張預設展開（最早到貨的最急）；其餘收起來 */
+    h += '<details class="ord"'+(oi === 0 ? " open" : "")+'>'
+      +  '<summary>'
+      +    '<span class="cal"><span class="m">'+esc(cal.m)+'</span>'
+      +      '<span class="d">'+esc(cal.d)+'</span></span>'
+      +    '<span class="sm"><span class="l1">'
+      +      (single ? "" : '<span class="store">'+esc(o.store_no+" "+o.store_name)+'</span> ')
+      +      '（'+esc(cal.w)+'）叫貨</span>'
+      /* 🔴 卡頭**不再印「・n 項」**（軒徹 2026-09-19 msg25358 截圖圈掉兩處）：
+         右邊的 pill 已經是 `filled/total`，總項數在那裡看得到，卡頭再寫一次是同一個數字。
+         ⛔ 不要加回去。（底下「已填 n / m 項」是跨單合計，不是這個數字，留著。） */
+      /* 🔴 卡頭**不再印「預估到貨」**（軒徹 2026-09-19 msg25352 截圖圈掉）：
+         每一條自己已經有「到貨」欄，卡頭再寫一個「該單最晚那天」只會被讀成
+         「整張單都是這天」——而那正好是錯的。⛔ 不要為了「一眼看到最晚哪天」加回去。
+         `o.eta` 後端照樣回，排序仍然用它（排序鍵不是給人看的東西）。 */
+      +      '<span class="l2">單號 '+esc(o.order_no)+'</span></span>'
+      +    '<span class="pill '+cls+'">'+filled+'/'+o.items.length+'</span>'
+      +    '<span class="chev">▶</span>'
+      +  '</summary>'
+      +  '<table><thead><tr><th class="eta">預估<br>到貨日</th><th>品項</th><th class="num">叫貨</th>'
+      +  '<th class="got"><span class="gotbox">'
+      +  '<span class="allbtn ghost" aria-hidden="true">取消</span>'
+      +  '<span class="gothd">進貨</span>'
+      +  '<span class="allbtn ghost" aria-hidden="true">全到</span></span></th>'
+      +  '</tr></thead><tbody>';
+    o.items.forEach(function(it, ii){
+      var v = (it.received === null || it.received === undefined) ? "" : it.received;
+      /* 規格寫法與叫貨清單**同一個式子**（軒徹 msg25341「讓它跟叫貨清單一樣」）：
+         規格 ＋「*MOQ/箱」。🔴 MOQ 拿不到就只印規格，⛔ 不要印「*null/箱」也不要填 1 充數。 */
+      var spec = (it.spec || "") + (it.moq ? "*"+it.moq+"/箱" : "");
+      /* 到貨日**逐條各自算**（msg25341「品項前面新增預估到貨日」＋ msg25347「要依照系統的」）。
+         🔴 來源是 ERP 的「叫貨週期（隔周X）」，⛔ **不是叫貨日+7** —— 那是應收明細那一欄
+            專用的規則，我第一版拿錯了，被當場抓到。
+         🔴 同一張單裡不同品項的週期不同 ⇒ 這一欄**本來就會不一樣**，
+            卡頭那個是「該單最晚那一天」。⛔ 不要為了好看改成整排印卡頭那個值。
+         🔴 週期查不到 ⇒ 後端回空字串 ⇒ 這裡印「—」。⛔ 不要用卡頭的值頂替。 */
+      h += '<tr><td class="eta">'+esc(it.eta ? md(it.eta) : "—")+'</td>'
+        +  '<td><div class="name">'+esc(it.name)+'</div>'
+        +  '<div class="spec">'+esc(spec)+'</div></td>'
+        +  '<td class="num">'+esc(it.qty)+' '+esc(it.unit)+'</td>'
+        +  '<td class="got"><div class="gotbox">'
+        +  '<button type="button" class="allbtn clr" onclick="clearOne('+oi+','+ii+')">取消</button>'
+        +  '<input type="number" inputmode="decimal" min="0" step="any"'
+        +  ' id="q'+oi+'_'+ii+'" data-qty="'+esc(it.qty)+'" value="'+esc(v)+'"'
+        +  ' oninput="mark(this)" placeholder="—">'
+        +  '<button type="button" class="allbtn" onclick="allIn('+oi+','+ii+')">全到</button>'
+        +  '</div></td></tr>';
+    });
+    h += '</tbody></table></details>';
+  });
+  document.getElementById("list").innerHTML = h;
+  /* 初始上色：render 完逐格套一次，⛔ 不要在組 HTML 時算 class ——
+     兩處各算一次就會分岔（改了 mark() 忘了改那邊）。 */
+  (DATA.orders || []).forEach(function(o, oi){
+    o.items.forEach(function(it, ii){
+      var el = document.getElementById("q"+oi+"_"+ii);
+      if(el) paint(el);
+    });
+  });
+  document.getElementById("bar").style.display = "flex";
+  tally();
+}
+
+function paint(el){
+  var v = el.value;
+  if(v === ""){ el.className = ""; return; }
+  el.className = (Number(v) === Number(el.getAttribute("data-qty"))) ? "filled" : "filled diff";
+}
+
+function mark(el){ paint(el); tally(); }
+
+/* 「全到」＝把叫貨數量原樣填進去（軒徹 msg25341）。
+   🔴 值來源是 `data-qty`＝後端回的叫貨量，⛔ 不是畫面上另外算的東西：
+      算第二次就有機會跟表上的數字分岔，而分岔之後兩邊都看起來正常。
+   🔴 **只填不存**：填完仍要按「儲存」。⛔ 不要讓它順手送出——
+      「按一下就進系統」跟「我填一填再檢查」是兩種操作，後者才是收貨現場在做的事。 */
+function allIn(oi, ii){
+  var el = document.getElementById("q"+oi+"_"+ii);
+  if(!el) return;
+  el.value = el.getAttribute("data-qty");
+  mark(el);
+}
+
+/* 「取消」＝把這一格清空（軒徹 2026-09-19 msg25364）。
+   🔴 清成 **空字串**，⛔ 不是 0 —— 空＝「還沒填」，0＝「這項一件都沒到」。
+      兩者在收貨現場是不同的事實，而且底欄「已填 n/m」只認空字串。
+   🔴 清完要走 mark()：不重畫的話格子會留著「已填」的綠框／黃框，看起來像還有值。 */
+function clearOne(oi, ii){
+  var el = document.getElementById("q"+oi+"_"+ii);
+  if(!el) return;
+  el.value = "";
+  mark(el);
+}
+
+function tally(){
+  var total = 0, filled = 0, diff = 0;
+  (DATA.orders || []).forEach(function(o, oi){
+    o.items.forEach(function(it, ii){
+      total++;
+      var el = document.getElementById("q"+oi+"_"+ii);
+      if(el && el.value !== ""){
+        filled++;
+        if(Number(el.value) !== Number(el.getAttribute("data-qty"))) diff++;
+      }
+    });
+  });
+  document.getElementById("sum").innerHTML =
+    "已填 <b>"+filled+"</b> / "+total+" 項"
+    + (diff ? '　<span style="color:#b06a00">'+diff+' 項與叫貨量不同</span>' : "");
+}
+
+/* ───────── 一顆鍵 ＋ 兩段確認（軒徹 msg25379）────────────────────────────────
+   第一段 `完成進貨` → **純前端**組一張「進貨清單」給他看，⛔ 這一段不打任何 API、不寫任何東西。
+   第二段 `確認送出` → 才 POST（`finish:true`），那一刻才寫應收明細。
+   🔴 **兩段之間不可以有任何寫入**：中間反悔按「返回修改」要能什麼都沒發生。
+   ⚠️ 已知取捨：一顆鍵之後**沒有「先存起來」這件事**了 —— 填到一半離開就是沒了。
+      後端 `receive_save(finish=False)` 那條路仍在（測試也還在跑），要接回來只差一顆鍵。 */
+var MODE = "edit";
+
+function collect(){
+  var out = [];
+  (DATA.orders || []).forEach(function(o, oi){
+    o.items.forEach(function(it, ii){
+      var el = document.getElementById("q"+oi+"_"+ii);
+      if(!el) return;
+      /* 空字串 → null＝「還沒填」，⛔ 不是 0。後端會把那一格刪掉，回到未填狀態。 */
+      out.push({order_no:o.order_no, code:it.code, name:it.name, spec:it.spec,
+                unit:it.unit, want:it.qty,
+                qty: el.value === "" ? null : el.value});
+    });
+  });
+  return out;
+}
+
+/* 第一段：把要送出去的東西攤開來給他看。
+   🔴 列的是 `collect()` 的結果本身，⛔ 不是另外再從畫面算一次 ——
+      「看到的」跟「送出的」必須是**同一份資料**，否則這一頁就失去了確認的意義。 */
+function review(entries){
+  var by = {}, order = [];
+  entries.forEach(function(e){
+    if(!by[e.order_no]){ by[e.order_no] = []; order.push(e.order_no); }
+    by[e.order_no].push(e);
+  });
+  var h = '<a class="back" href="javascript:void(0)" onclick="back()">← 返回修改</a>';
+  order.forEach(function(no){
+    h += '<div class="rv"><h3>單號 '+esc(no)+'</h3>';
+    by[no].forEach(function(e){
+      var skip = e.qty === null;
+      var left = skip ? null : (Number(e.want) - Number(e.qty));
+      h += '<div class="ln'+(skip ? " skip" : "")+'">'
+        +  '<span class="nm">'+esc(e.name)+'<small>'+esc(e.spec || "")+'</small></span>'
+        +  '<span class="q">'
+        +  (skip ? "未填" : esc(e.qty)+" "+esc(e.unit))
+        +  (skip || left <= 0 ? "" : '<em>還差 '+esc(left)+'</em>')
+        +  (!skip && left < 0 ? '<em>多 '+esc(-left)+'</em>' : "")
+        +  '</span></div>';
+    });
+    h += '</div>';
+  });
+  document.getElementById("list").innerHTML = h;
+  window.scrollTo(0, 0);
+}
+
+function back(){
+  MODE = "edit";
+  document.getElementById("act").textContent = "完成進貨";
+  say("", "");
+  render();
+  /* 🔴 `render()` 是照 `DATA` 重畫的，而**一顆鍵之後沒有任何東西被存起來**
+     ⇒ 不把 `PENDING` 寫回去的話，按「返回修改」會把他剛剛填的十幾格全部清空，
+     而畫面看起來只是「回到上一頁」。⛔ 這一段不可以省。 */
+  var pos = {};
+  PENDING.forEach(function(e){ pos[e.order_no+"|"+e.code] = e.qty; });
+  (DATA.orders || []).forEach(function(o, oi){
+    o.items.forEach(function(it, ii){
+      var v = pos[o.order_no+"|"+it.code];
+      var el = document.getElementById("q"+oi+"_"+ii);
+      if(el && v !== undefined && v !== null){ el.value = v; paint(el); }
+    });
+  });
+  tally();
+}
+
+function act(){
+  var btn = document.getElementById("act");
+  if(MODE === "edit"){
+    PENDING = collect();
+    var filled = PENDING.filter(function(e){ return e.qty !== null; }).length;
+    if(!filled){
+      say("warn", "一項都沒填，沒有東西可以進貨。");
+      return;
+    }
+    MODE = "review";
+    btn.textContent = "確認送出";
+    say("warn", "確認下面這張進貨清單。<b>再按一次「確認送出」才會寫進去。</b>");
+    review(PENDING);
+    return;
+  }
+  /* 第二段：真的寫 */
+  btn.disabled = true; btn.textContent = "送出中…";
+  fetch(ENDPOINT+"/receive", {method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({u:Q_UID, s:Q_SIG, finish:true,
+                              entries: PENDING.map(function(e){
+                                return {order_no:e.order_no, code:e.code, qty:e.qty};
+                              })})})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok){ throw new Error(d.error || "寫不進去"); }
+      MODE = "edit";
+      say("ok", "這次進貨完成了，已寫進應收明細（"+(d.full||0)+" 筆）。"
+              + "還沒到的下次打開還會看到。");
+      load();                     /* ⛔ 不要只留畫面上的值當「成功」（[[f-actio-green]]） */
+    })
+    .catch(function(e){
+      /* 🔴 失敗要**留在確認頁**，⛔ 不可以退回編輯頁：退回去看起來像「我剛剛沒按到」，
+         他會重填一次；留在這裡他才知道是「按了但沒成功」。 */
+      say("bad", "沒有寫進去：" + esc(e.message) + "　再按一次「確認送出」就好。");
+    })
+    .then(function(){
+      btn.disabled = false;
+      btn.textContent = MODE === "review" ? "確認送出" : "完成進貨";
+    });
+}
+var PENDING = [];
+
+load();
+</script>
+</body>
+</html>

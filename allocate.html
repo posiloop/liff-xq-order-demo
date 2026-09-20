@@ -161,7 +161,8 @@ function render(){
   /* 🔴 示範橫幅插在「試算」橫幅**之前**：兩件事要分開講 ——
      「不會寫進表」是這一版的限制，「數字是假的」是這一次的資料。 */
   document.getElementById("demo").innerHTML = d.demo
-    ? '<div class="demo">⚠️ 這是<u>示範資料</u>，品項、店名、數量全都是我編的，'
+    ? '<div class="demo">⚠️ 這是<u>示範單</u>：叫貨量照你 09-20 那張〈各店明細〉，'
+      + '供應商與中轉倉庫存是現查的真值 —— <b>假的只有「有這批單」這件事</b>，'
       + '不是今天真的叫貨單。要看真的把網址後面的 <code>&amp;demo=1</code> 拿掉。</div>'
     : "";
   if(!d.rows.length){
