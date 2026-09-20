@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>享奇雞 彙整分配</title>
+<style>
+  :root{
+    --bg:#f5f5f3; --card:#fff; --line:#e0ddd8; --ink:#1c1c1c; --muted:#6b6b6b;
+    --brand:#0f7b3f; --brand-soft:#eef7f1; --ok:#0f7b3f; --bad:#b42318; --warn:#b06a00;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  /* 同叫貨／進貨／調撥頁：連點輸入框不要觸發「連點兩下＝放大」（軒徹 msg24534）。
+     ⛔ 不要改用 maximum-scale／user-scalable=no，那是把整頁縮放關掉。 */
+  button,input,select,summary{touch-action:manipulation}
+  html,body{max-width:100%;overflow-x:hidden}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",system-ui,sans-serif;
+       font-size:16px;line-height:1.55;padding-bottom:130px}
+  header{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;
+         padding:calc(env(safe-area-inset-top) + 12px) 14px 12px}
+  header .t{font-weight:700;font-size:17px}
+  header .t small{display:block;font-weight:400;opacity:.92;font-size:12.5px}
+  main{padding:12px}
+
+  /* 🔴 這條橫幅是**功能的一部分，不是裝飾**：這一版按下去不會寫進任何表。
+     沒有它，使用者按完看不到帳有變，只能自己猜是「壞了」還是「還沒做」。 */
+  .phase{background:#fff7e6;border:1px solid #f0d9a8;color:#7a4b00;border-radius:10px;
+         padding:10px 12px;font-size:13px;line-height:1.6;margin-bottom:10px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+        margin-bottom:10px;overflow:hidden}
+  .card h3{font-size:14.5px;padding:11px 12px;background:#f7f6f4;color:#444;font-weight:700;
+           border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
+  .card h3 .sup{color:var(--muted);font-weight:600;font-size:12.5px}
+  .pad{padding:12px}
+
+  .row{border-top:1px solid var(--line);padding:10px 12px}
+  .row:first-child{border-top:0}
+  .row .hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .row .who{font-size:13px;color:var(--muted);font-weight:600}
+  .row .nm{font-weight:700;font-size:15px}
+  .row .sp{font-size:12.5px;color:var(--muted)}
+  .row .in{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .row .lb{font-size:12.5px;color:var(--muted);font-weight:600}
+  /* 🔴 font-size 必須 >=16px：iOS Safari 對小於 16px 的輸入框會自動放大整頁。 */
+  input[type=number]{font-size:16px;border:1.5px solid var(--line);border-radius:8px;
+                     background:#fff;padding:9px 2px;width:70px;text-align:center}
+  .row.bad input[type=number]{border-color:var(--bad);background:#fdf2f1}
+  .tally{font-size:13px;font-weight:700;margin-left:auto}
+  .tally.ok{color:var(--ok)} .tally.bad{color:var(--bad)}
+  .unk{display:inline-block;background:#fff7e6;border:1px solid #f0d9a8;color:#7a4b00;
+       border-radius:6px;font-size:11.5px;padding:1px 6px;margin-left:6px;font-weight:700}
+
+  .bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
+       padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);z-index:30}
+  .bar button{width:100%;border:0;border-radius:10px;background:var(--brand);color:#fff;
+              font-size:16.5px;font-weight:700;padding:13px}
+  .bar button[disabled]{background:#b9c7bf}
+  .msg{border-radius:10px;padding:10px 12px;font-size:13.5px;line-height:1.6;margin-bottom:10px}
+  .msg.bad{background:#fdf2f1;border:1px solid #f3c9c4;color:var(--bad)}
+  .msg.warn{background:#fff7e6;border:1px solid #f0d9a8;color:#7a4b00}
+  .msg.ok{background:var(--brand-soft);border:1px solid #bfe0cd;color:var(--ok)}
+  .msg ul{margin:6px 0 0;padding-left:18px}
+  .empty{padding:26px 14px;text-align:center;color:var(--muted);font-size:14px;line-height:1.8}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:8px 12px;border-top:1px solid var(--line);text-align:left}
+  th{background:#faf9f7;color:var(--muted);font-size:12.5px}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<header>
+  <div class="t">🧮 彙整分配
+    <small id="sub">載入中…</small>
+  </div>
+</header>
+
+<main>
+  <div class="phase">
+    <b>這一版是「試算」</b>：按下去只會算給你看，<b>不會寫進採購單、調撥明細或應收明細</b>。
+    玩過覺得對，再跟我說要不要真的落帳。
+  </div>
+  <div id="msg"></div>
+  <div id="body"></div>
+  <div id="result"></div>
+</main>
+
+<div class="bar"><button id="go" onclick="preview()" disabled>試算看看</button></div>
+
+<script>
+/* 後端入口。⛔ 與 apply／receiving／transfer 同一個值、同一個來源；
+   分岔的話這頁會安靜地打到別的環境。 */
+var ENDPOINT = "https://hook.aemassinc.net/xq";
+function qs(k){
+  var m = new RegExp("[?&]"+k+"=([^&]*)").exec(window.location.search);
+  return m ? decodeURIComponent(m[1].replace(/\+/g," ")) : "";
+}
+var Q_UID = qs("u"), Q_SIG = qs("s"), Q_DAY = qs("day");
+var DATA = null;
+
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  });
+}
+function say(html, cls){
+  document.getElementById("msg").innerHTML = cls ? '<div class="msg '+cls+'">'+html+'</div>' : "";
+}
+
+/* 🔴 列的識別一律用後端給的 `key`（供應商|店|貨號），⛔ 不用畫面上的列序：
+   使用者填到一半重新整理、或後端多出一張單，列序就會換，數字會填到別人身上。 */
+function rowEl(k, which){ return document.getElementById(which+"__"+k); }
+
+function load(){
+  if(!Q_UID || !Q_SIG){
+    say("這個連結少了身分資訊。請從 LINE 的選單重新點一次，不要直接貼網址。", "bad");
+    document.getElementById("sub").textContent = "沒有身分資訊";
+    return;
+  }
+  var url = ENDPOINT+"/allocate?u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG)
+          + (Q_DAY ? "&day="+encodeURIComponent(Q_DAY) : "");
+  fetch(url).then(function(r){ return r.json(); }).then(function(d){
+    /* 🔴 後端回 `ok:false` 是「講得出原因的拒絕」（沒權限／清單變了），
+       ⛔ 不要跟網路錯誤混成同一句話：一個是使用者要處理的，一個是我要處理的。 */
+    if(!d || !d.ok){ say(esc((d && d.error) || "讀不到資料"), "bad");
+                     document.getElementById("sub").textContent = "讀不到"; return; }
+    DATA = d;
+    render();
+  }).catch(function(e){
+    say("連不上系統（"+esc(e.message || e)+"）。這是連線問題，不是你填錯。", "bad");
+    document.getElementById("sub").textContent = "連不上";
+  });
+}
+
+function render(){
+  var d = DATA;
+  document.getElementById("sub").textContent =
+    d.day + "　共 " + d.orders + " 張店家單、" + d.rows.length + " 列";
+  if(!d.rows.length){
+    document.getElementById("body").innerHTML =
+      '<div class="card"><div class="empty">今天還沒有要彙整的單。<br>'
+      + '店家送出叫貨、而且過了結單時間之後，這裡才會有東西。</div></div>';
+    return;
+  }
+  /* 逐供應商一張卡：拆單是「跟哪一家買」的決定，同一家的東西要擺在一起才看得出總量。 */
+  var bySup = {}, order = [];
+  d.rows.forEach(function(r){
+    if(!bySup[r.supplier_code]){ bySup[r.supplier_code] = []; order.push(r.supplier_code); }
+    bySup[r.supplier_code].push(r);
+  });
+  var h = "";
+  order.forEach(function(code){
+    var rs = bySup[code];
+    h += '<div class="card"><h3><span>'+esc(rs[0].supplier_name)+'</span>'
+      +  '<span class="sup">'+esc(code)+'　'+rs.length+' 列</span></h3>';
+    rs.forEach(function(r){
+      h += '<div class="row" id="row__'+esc(r.key)+'">'
+        +   '<div class="hd"><span class="nm">'+esc(r.name)+'</span>'
+        +     '<span class="who">'+esc(r.store_name)+'</span></div>'
+        +   '<div class="sp">'+esc(r.spec)+'　叫貨 '+r.qty+' '+esc(r.unit)
+        +     '　配送邏輯：'+esc(r.mode || "（空白）")
+        +     (r.unknown_mode ? '<span class="unk">沒設定，先當直送</span>' : "")
+        +   '</div>'
+        +   '<div class="in">'
+        +     '<span class="lb">直送</span>'
+        +     '<input type="number" inputmode="numeric" min="0" id="direct__'+esc(r.key)+'"'
+        +       ' value="'+r.direct+'" oninput="tally(\''+esc(r.key)+'\')">'
+        +     '<span class="lb">中轉倉</span>'
+        +     '<input type="number" inputmode="numeric" min="0" id="transit__'+esc(r.key)+'"'
+        +       ' value="'+r.transit+'" oninput="tally(\''+esc(r.key)+'\')">'
+        +     '<span class="tally" id="tally__'+esc(r.key)+'"></span>'
+        +   '</div></div>';
+    });
+    h += '</div>';
+  });
+  document.getElementById("body").innerHTML = h;
+  d.rows.forEach(function(r){ tally(r.key); });
+  document.getElementById("go").disabled = false;
+  if(d.unknown){
+    say("有 "+d.unknown+" 列在 ERP〈配送邏輯〉沒有設定（空白或 X）。"
+      + "我先當直送算，<b>但那不代表它就是直送</b>，請確認過再送。", "warn");
+  }
+}
+
+/* 每一列即時對帳。🔴 只改畫面，不擋輸入：
+   擋住輸入的話使用者沒辦法「先填一邊再填另一邊」，中間狀態本來就會不相等。 */
+function tally(k){
+  var r = DATA.rows.filter(function(x){ return x.key === k; })[0];
+  if(!r) return;
+  var a = parseInt(rowEl(k,"direct").value || "0", 10);
+  var b = parseInt(rowEl(k,"transit").value || "0", 10);
+  if(isNaN(a)) a = 0;
+  if(isNaN(b)) b = 0;
+  var t = document.getElementById("tally__"+k), row = document.getElementById("row__"+k);
+  var ok = (a + b === r.qty);
+  t.className = "tally " + (ok ? "ok" : "bad");
+  t.textContent = ok ? ("＝ " + r.qty) : (a + b) + " / " + r.qty;
+  row.className = "row" + (ok ? "" : " bad");
+}
+
+function preview(){
+  var lines = DATA.rows.map(function(r){
+    return {key: r.key,
+            direct: parseInt(rowEl(r.key,"direct").value || "0", 10) || 0,
+            transit: parseInt(rowEl(r.key,"transit").value || "0", 10) || 0};
+  });
+  var btn = document.getElementById("go");
+  btn.disabled = true; btn.textContent = "算…";
+  fetch(ENDPOINT+"/allocate-preview", {method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({u:Q_UID, s:Q_SIG, day:DATA.day, lines:lines})})
+    .then(function(r){ return r.json(); })
+    .then(function(d){ showResult(d); })
+    .catch(function(e){
+      say("連不上系統（"+esc(e.message || e)+"）。", "bad");
+    })
+    .then(function(){ btn.disabled = false; btn.textContent = "試算看看"; });
+}
+
+function showResult(d){
+  if(d.error){ say(esc(d.error), "bad"); return; }
+  var h = "";
+  if(d.warnings && d.warnings.length){
+    h += '<div class="msg '+(d.ok ? "warn" : "bad")+'">'
+      +  (d.ok ? "算出來了，但有幾件要你確認：" : "<b>還不能送</b>，這幾列的數字兜不攏：")
+      +  "<ul>" + d.warnings.map(function(w){ return "<li>"+esc(w)+"</li>"; }).join("") + "</ul>"
+      +  '</div>';
+  }
+  if(d.ok){
+    h += '<div class="msg ok">'+esc(d.note)+'</div>';
+    h += '<div class="card"><h3><span>跟廠商買（採購單）</span></h3>';
+    if(!d.purchase.length){ h += '<div class="empty">這次沒有要跟廠商買的東西。</div>'; }
+    d.purchase.forEach(function(b){
+      h += '<table><thead><tr><th>'+esc(b.supplier_name)+'</th><th class="num">數量</th></tr></thead><tbody>';
+      b.items.forEach(function(i){
+        h += "<tr><td>"+esc(i.name)+'　<span class="sp">'+esc(i.spec)+"</span></td>"
+          +  '<td class="num">'+i.qty+" "+esc(i.unit)+"</td></tr>";
+      });
+      h += "</tbody></table>";
+    });
+    h += "</div>";
+    h += '<div class="card"><h3><span>從中轉倉調出（調撥單）</span>'
+      +  '<span class="sup">系統自己開，店家看不到</span></h3>';
+    if(!d.transfer.length){ h += '<div class="empty">這次沒有要從中轉倉出的東西。</div>'; }
+    d.transfer.forEach(function(b){
+      h += '<table><thead><tr><th>中轉倉 → '+esc(b.store_name)+'</th><th class="num">數量</th></tr></thead><tbody>';
+      b.items.forEach(function(i){
+        h += "<tr><td>"+esc(i.name)+'　<span class="sp">'+esc(i.spec)+"</span></td>"
+          +  '<td class="num">'+i.qty+" "+esc(i.unit)+"</td></tr>";
+      });
+      h += "</tbody></table>";
+    });
+    h += "</div>";
+    if(d.untouched && d.untouched.length){
+      h += '<div class="msg warn">有 '+d.untouched.length
+        +  ' 列你沒有動過，照 ERP〈配送邏輯〉的預設算。<b>沒動過不等於 0</b>，'
+        +  '所以那些量還是有買／有調。</div>';
+    }
+  }
+  document.getElementById("result").innerHTML = h;
+  document.getElementById("result").scrollIntoView({behavior:"smooth", block:"start"});
+}
+
+load();
+</script>
+</body>
+</html>
