@@ -178,9 +178,9 @@ function render(){
         /* 🔴 倉存要跟「這本帳沒記過」分開講（後端回 null 就是後者）。
            ⛔ 不可以把 null 印成 0 —— 那會讓他以為倉裡真的空了。 */
         +   '<div class="sp">中轉倉現有：'
-        +     (r.stock === null || r.stock === undefined
-        +        ? '<span class="unk">這本帳沒記過這個品項</span>'
-        +        : '<b>'+r.stock+'</b> '+esc(r.unit))
+        +     ((r.stock === null || r.stock === undefined)
+               ? '<span class="unk">這本帳沒記過這個品項</span>'
+               : '<b>'+r.stock+'</b> '+esc(r.unit))
         +   '</div>'
         +   '<div class="in">'
         +     '<span class="lb">直送</span>'
