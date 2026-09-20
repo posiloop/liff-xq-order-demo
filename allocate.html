@@ -256,7 +256,9 @@ function showResult(d){
   var h = "";
   if(d.warnings && d.warnings.length){
     h += '<div class="msg '+(d.ok ? "warn" : "bad")+'">'
-      +  (d.ok ? "算出來了，但有幾件要你確認：" : "<b>還不能送</b>，這幾列的數字兜不攏：")
+      /* 🔴 標題不要寫死成「數字兜不攏」：擋人的原因不只一種（兜不攏、中轉倉超領、
+         倉裡沒記過這個品項…）。把所有原因講成同一個，人就會照著那句話去找錯的地方。 */
+      +  (d.ok ? "算出來了，但有幾件要你確認：" : "<b>還不能送</b>，下面這幾件要先處理：")
       +  "<ul>" + d.warnings.map(function(w){ return "<li>"+esc(w)+"</li>"; }).join("") + "</ul>"
       +  '</div>';
   }
