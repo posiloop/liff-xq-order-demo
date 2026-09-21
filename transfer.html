@@ -510,6 +510,11 @@ function collectIn(){
       if(!el) return;
       /* 空字串 → null＝「還沒填」，⛔ 不是 0。後端會把那一格刪掉，回到未填狀態。 */
       out.push({transfer_no:o.transfer_no, from_name:o.from_name,
+                /* 🔴 `row`＝〈調撥明細〉上的實際列號，後端發的，**原封送回去**。
+                   ⛔ 不要用 `ii`（畫面上的位置）代替：排序一變就對到別列。
+                   同一張單同一個貨號可以有兩列（分兩次調出），沒有 `row` 後端分不出
+                   是哪一列 ⇒ 第二列會繼承第一列的已收數（2026-09-22 msg26165 bug B）。 */
+                row:it.row,
                 code:it.code, name:it.name, spec:it.spec, unit:it.unit,
                 /* 🔴 單價**原封帶出來給確認頁顯示用**（軒徹 msg25473「畫面上幫補上金額」）。
                    ⛔ 前端算出來的金額**不會**送上去 —— `submit()` 只送數量，
@@ -614,11 +619,13 @@ function back(){
     /* 🔴 先把剛剛填的值寫回 `DATA.incoming[].draft`，再 render ——
        不寫回去的話，按「返回修改」會把他填的十幾格全部清空，
        而畫面看起來只是「回到上一頁」（進貨頁同一段）。 */
+    /* 🔴 回填的鍵也要帶列號，⛔ 不是 `單號|貨號`：同一張單同一個貨號兩列的話，
+       按「返回修改」會把第二列的值蓋成第一列的（填了 3 跟 8，回來變成兩個 3）。 */
     var pos = {};
-    (PENDING || []).forEach(function(e){ pos[e.transfer_no+"|"+e.code] = e.qty; });
+    (PENDING || []).forEach(function(e){ pos[e.transfer_no+"|"+e.code+"|"+e.row] = e.qty; });
     (DATA.incoming || []).forEach(function(o){
       o.items.forEach(function(it){
-        var v = pos[o.transfer_no+"|"+it.code];
+        var v = pos[o.transfer_no+"|"+it.code+"|"+it.row];
         if(v !== undefined) it.draft = v;
       });
     });
@@ -690,14 +697,17 @@ function sendOut(){
       body: JSON.stringify({u:Q_UID, s:Q_SIG, store:DATA.store_no, to:TO_SEL, qty:qty})})
     .then(function(r){ return r.json(); });
 }
-/* 🔴 調入是**逐單**送的：一張單一次 POST（後端的 `finish` 是以「單」為單位關掉的）。
+/* 🔴 調入是**逐單**送的：一張單一次 POST。
+   📌 2026-09-22 起後端的「完成」是**按列**記的（msg26165 走甲），不再是整張單一個旗標
+      ——但請求仍然逐單發，理由不變（見下一行）。
    ⛔ 不可以把多張單併成一個請求 —— 那樣其中一張失敗時，另外幾張的狀態會說不清楚。
    有幾張就發幾次，任何一張失敗就整體報錯（已成功的那幾張是真的成功了，訊息裡講清楚）。 */
 function sendIn(){
   var by = {};
   PENDING.forEach(function(e){
     if(e.qty === null) return;
-    (by[e.transfer_no] = by[e.transfer_no] || []).push({code:e.code, qty:e.qty});
+    /* 🔴 `row` 是後端的必填欄（缺了它後端會直接拒收並叫人重開頁面，⛔ 不會自己猜一列）。 */
+    (by[e.transfer_no] = by[e.transfer_no] || []).push({code:e.code, qty:e.qty, row:e.row});
   });
   var nos = Object.keys(by), done = [], appended = 0;
   return nos.reduce(function(chain, no){
