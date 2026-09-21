@@ -51,6 +51,10 @@
           列 60 項再從裡面找那一項，是把「挑一個」變成「掃一遍」。 */
   .ln{display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
   .ln:first-child{border-top:0}
+  /* 數字框右邊的單位（軒徹 2026-09-21 msg26073）。
+     🔴 `min-width` 讓它在**還沒選品項、單位是空的**時候也佔住位置，
+        ⛔ 否則選了品項之後整列會往左跳一下，看起來像畫面閃掉。 */
+  .ln .unit{flex:0 0 auto;min-width:26px;font-size:13px;color:var(--muted);line-height:1}
   .ln .rm{flex:0 0 auto;border:1.5px solid var(--line);background:#fff;color:var(--muted);
           border-radius:8px;padding:9px 10px;font-size:13px;font-weight:600;line-height:1}
   .ln .rm:active{background:#f1f0ee}
@@ -293,23 +297,31 @@ function renderOut(){
     });
     /* 🔴 `step="any"` ＋ 不做倍數檢查（軒徹逐字「數量不用照moq」）。
        ⛔ 不要順手加 `n % moq` 那道閘 —— 那是叫貨的規矩，他明講調撥不套。 */
+    var it = byCode(ln.code);
+    /* 單位放在數字框右邊（軒徹 msg26073）。品項換了整段會重畫（pick → renderOut），
+       所以這裡直接讀當下選到的品項，⛔ 不需要另外寫一段更新單位的碼。 */
     h += '</select>'
       +  '<input type="number" inputmode="decimal" min="0" step="any" id="q'+i+'"'
       +  ' value="'+esc(ln.qty)+'" oninput="mark(this);tally()" placeholder="數量">'
+      +  '<span class="unit">'+esc((it && it.unit) || "")+'</span>'
       +  '<button type="button" class="rm" onclick="rmLine('+i+')">移除</button>'
       +  '</div>';
-    var it = byCode(ln.code);
-    if(it){
-      h += '<div class="amt">'+esc(it.spec || "")
-        +  (it.moq ? " *"+esc(it.moq)+"/箱" : "")
-        +  (ln.qty !== "" && it.box_price && it.moq
-            ? "　預估 " + money((Number(ln.qty)/it.moq) * it.box_price) : "")
+    /* 🔴 右下角**不再印規格與 MOQ**（軒徹 msg26073「會混淆」）：
+       品項下拉本身已經帶著「（3Kg/包）」，右下角再印一次 `3Kg/包 *4/箱`，
+       看起來像是在規定這一格要填的單位或倍數 —— 而調撥**本來就不必照 MOQ**
+       （他逐字「數量不用照moq」）。⇒ 只留預估金額。
+       ⛔ 沒有東西可印就整個 div 不要輸出，不要留一條空白的線。 */
+    if(it && ln.qty !== "" && it.box_price && it.moq){
+      h += '<div class="amt">預估 '
+        +  money((Number(ln.qty)/it.moq) * it.box_price)
         +  '</div>';
     }
   });
   h += '<div class="pad"><button type="button" class="addln" onclick="addLine()">＋ 新增一項</button></div>'
+    /* 🔴 第二句照軒徹 msg26073 **逐字**改寫，⛔ 不要順手潤飾也不要加粗：
+       他改掉的是「帳什麼時候動」的講法，不是文筆。 */
     +  '<div class="hint">數量不必是整箱，零頭可以直接填。'
-    +  '<br>送出後這批貨會開一張調撥單給對方店鋪，<b>對方點收之前不會計入任何一邊的帳</b>。</div>'
+    +  '<br>送出調撥後，對方店鋪要做調入，帳款才會跟著轉移。</div>'
     +  '</div>';
   document.getElementById("pane").innerHTML = h;
   document.getElementById("act").textContent = "送出調撥";
