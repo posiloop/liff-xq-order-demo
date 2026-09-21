@@ -145,7 +145,12 @@
     <div class="center">
       <div class="big-emoji">✅</div>
       <h2>已送出</h2>
-      <p>管理員那邊已經收到，不用再回「填寫完畢」了。</p>
+      <!-- 2026-09-21 軒徹 msg25996（截圖圈起來那段）：原本是「管理員那邊已經收到，
+           不用再回『填寫完畢』了。」⇒ 改成講「還能改到幾點」。
+           🔴 這行是**承諾**不是說明：上面寫幾點到幾點，系統就要真的擋在那個區間外。
+              現在的閘是 `~/.claude/state/xq-liff-schedule.txt`（不存在＝不限時段），
+              ⛔ 該檔沒設好之前，這行等於寫了一張系統不認的支票。 -->
+      <p>當日 09:00～20:00 都能再修改</p>
     </div>
     <div class="done-box">
       <div style="font-weight:700;margin-bottom:6px"><span id="doneStore">台北江南店</span> 叫貨單</div>
@@ -158,7 +163,12 @@
               而過期的紙看起來完全正常。PDF 要等驗收那關把量定案之後才有意義。 -->
       <button class="ghost" onclick="openView()">📄 看這張單</button>
     </div>
-    <button class="ghost" onclick="show('scrOrder')">← 回去看填的內容</button>
+    <!-- 2026-09-21 軒徹 msg25996：「回去看填的內容」⇒「返回修改訂單」。
+         🔴 字面變成「修改」之後這顆鈕就有責任了：按回去必須真的能改並重送。
+            **已查過碼，做得到**：`show()` 只切畫面、`qty[]` 原封不動留著，
+            改完再按「填寫完畢，送出」會再 POST 一次，後端有取代邏輯（舊列標「已取代」）。
+            ⛔ 之後若有人把回程改成唯讀，這個標籤就變成謊話，要一起改回來。 -->
+    <button class="ghost" onclick="show('scrOrder')">← 返回修改訂單</button>
   </main>
 </section>
 
