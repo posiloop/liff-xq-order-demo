@@ -188,16 +188,10 @@ function esc(s){
     return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
   });
 }
-/* 叫貨機器人的 LINE basic ID。與 apply.html 同一個值、同一個來源（`GET /v2/bot/info` 實查，
-   displayName「叫貨機器人」）。⛔ 兩邊分岔的話，其中一邊會把人送去別的帳號而且不會報錯。 */
-var BOT_ID = "@040xpvza";
-/* 送出成功後隔多久跳回 1:1 對話（毫秒）。軒徹 msg25475「跳轉時間設定 5 秒／進貨叫貨都是」⇒ 5000（原 1500）。
-   🔴 與 `transfer.html` 的 `BACK_DELAY_MS` **同名同值**，⛔ 但兩頁各有一份：
-      這兩個檔是獨立的靜態頁，沒有共用的 JS —— 硬湊一個共用檔只會多一個要同步的地方。
-      改的時候兩頁都要改，這行字就是提醒。
-   🔴 下限不是 0：立刻跳的話「已登錄完成」那句他看不到，
-      而送出成功卻什麼都沒看到，跟送出失敗長得一模一樣。 */
-var BACK_DELAY_MS = 5000;
+/* 🔴 `BOT_ID`／`BACK_DELAY_MS` 已刪（軒徹 2026-09-22 msg26194「進貨完成後也不要跳回LINE」）：
+   這一頁送出後不再自動跳回 LINE ⇒ 兩顆常數在本檔已無呼叫點。
+   ⛔ 不留著「以後可能用到」——沒有呼叫點的設定值只會讓下一個人以為它還在生效（[[f-no-dead-code]]）。
+   `apply.html` 仍持有自己的 `BOT_ID`（那是使用者自己按的「手動回對話」連結，不是自動跳轉），本次未動。 */
 
 function say(cls, html){
   document.getElementById("msg").innerHTML = cls ? '<div class="msg '+cls+'">'+html+'</div>' : "";
@@ -216,7 +210,12 @@ function md(s){
   return p.length === 3 ? (+p[1])+"/"+(+p[2]) : "—";
 }
 
-function load(){
+/* `keepMsg=true` ⇒ 讀完**不要**清掉上面那句訊息。
+   🔴 這顆參數是跟「送出後不再自動跳回 LINE」綁在一起的：以前有跳轉頂著，
+      `say("", "")` 把「已登錄完成」清掉沒人看得出來；跳轉一拿掉，畫面就變成
+      「按了送出 → 什麼都沒有」，跟送出失敗長得一模一樣（[[f-actio-green]]）。
+   ⛔ 開頁那次（檔尾 `load()`）不要帶 true —— 那時本來就沒有訊息要保。 */
+function load(keepMsg){
   if(!Q_UID || !Q_SIG){
     document.getElementById("sub").textContent = "缺少身分資訊";
     say("warn", "此連結缺少身分資訊，無法顯示進貨清單。<br>請返回 LINE 重新點選「<b>進貨</b>」。");
@@ -227,7 +226,7 @@ function load(){
   fetch(url).then(function(r){ return r.json(); })
     .then(function(d){
       if(!d.ok){ throw new Error(d.error || "讀不到資料"); }
-      DATA = d; say("", ""); render();
+      DATA = d; if(!keepMsg) say("", ""); render();
     })
     .catch(function(e){
       document.getElementById("sub").textContent = "讀取失敗";
@@ -476,24 +475,16 @@ function act(){
       MODE = "edit";
       say("ok", "本次進貨已登錄完成，共 "+(d.full||0)+" 筆。"
               + "未到貨品項將保留於下次進貨清單。");
-      load();                     /* ⛔ 不要只留畫面上的值當「成功」（[[f-actio-green]]） */
-      /* 🔴 送出成功 → 回到 1:1 對話（軒徹 2026-09-19 msg25401／25403「回到對話框」）。
-         ⛔ **不可以用 `liff.closeWindow()`**：這一頁不是真 LIFF —— 它是用一般
-            `uri` action 開在 LINE 內建瀏覽器裡的（`XQ_LIFF_RECEIVING_URL` 是
-            posiloop.github.io 的直連網址，整頁也沒有載 LIFF SDK）。
-            `liff` 在這裡是 undefined，呼叫下去只會丟例外而且**畫面沒有任何變化**。
-         ⇒ 走 `line://` 深連結回機器人的 1:1（四顆圖文選單按鈕就在那）。
-            BOT_ID 與 `apply.html` 同一個來源（`GET /v2/bot/info` 實查），⛔ 不要在這裡另寫一個。
-         ⏱ 延遲 `BACK_DELAY_MS` 才跳（值與理由在檔頭那顆常數上，⛔ 不要在這裡再寫一次秒數
-            —— 兩邊各寫一個數字，改了一邊就會有一句話永遠在說謊）。 */
-      setTimeout(function(){
-        /* 🔴 **用 `https://line.me/R/…`，⛔ 不要用 `line://`。**
-           我 23:27 改成 `line://` 想省掉 Safari 那一跳，**實測是退步**：
-           iOS 對自訂 scheme 會跳一個原生確認框「要在『LINE』中打開此網頁嗎？取消／打開」
-           （軒徹 23:34 錄影第 17 格），等於多一次點擊，而且看起來像出錯。
-           `https://` 這條雖然會閃一下 Safari，但**不需要他再按一次**。 */
-        location.href = "https://line.me/R/oaMessage/" + BOT_ID;
-      }, BACK_DELAY_MS);
+      /* 🔴 **進貨完成後不自動跳回 LINE**（軒徹 2026-09-22 msg26194「進貨完成後也不要跳回LINE」）。
+         與 `transfer.html` 的調出（msg26078）、調入（msg26080）同一件事，這是第三個、也是最後一個點。
+         ⇒ `load(true)` **要保住訊息**：`load()` 讀完會 `say("", "")` 把「已登錄完成」清掉，
+            以前有跳轉頂著沒人發現；跳轉一拿掉就會變成「按了送出 → 什麼都沒有」（[[f-actio-green]]）。
+         ⛔ 沒有順手加一顆「回 LINE」按鈕：他要的是「不要自動跳」，不是「換個方式跳」（[[f-xc-unreq]]）。
+            要回對話框，LINE 內建瀏覽器本身就有返回。
+         📌 原本那條跳轉的實作坑（`liff.closeWindow()` 在這頁是 undefined —— 這頁不是真 LIFF，
+            是用一般 `uri` action 開在 LINE 內建瀏覽器裡的；`line://` 在 iOS 會多跳一個原生確認框）
+            已隨呼叫點一起刪除，要復原去翻 `receiving.html.bak-pre-nojump-20260922-040543` 或 git 史。 */
+      load(true);                 /* ⛔ 不要只留畫面上的值當「成功」（[[f-actio-green]]） */
     })
     .catch(function(e){
       /* 🔴 失敗要**留在確認頁**，⛔ 不可以退回編輯頁：退回去看起來像「我剛剛沒按到」，
