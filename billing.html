@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>享奇雞 帳單</title>
+<style>
+  :root{
+    --bg:#f5f5f3; --card:#fff; --line:#e0ddd8; --ink:#1c1c1c; --muted:#6b6b6b;
+    --brand:#0f7b3f; --brand-soft:#eef7f1; --ok:#0f7b3f; --bad:#b42318; --warn:#b06a00;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  button,input,select,summary{touch-action:manipulation}
+  html,body{max-width:100%;overflow-x:hidden}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",system-ui,sans-serif;
+       font-size:16px;line-height:1.55;padding-bottom:96px}
+  header{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;
+         padding:calc(env(safe-area-inset-top) + 12px) 14px 12px}
+  header .t{font-weight:700;font-size:17px}
+  header .t small{display:block;font-weight:400;opacity:.92;font-size:12.5px}
+  main{padding:12px}
+
+  .pick{display:flex;gap:8px;margin-bottom:12px}
+  .pick select{flex:1;min-width:0;padding:11px 10px;border:1.5px solid var(--line);
+               border-radius:10px;background:var(--card);color:var(--ink);font-size:15px}
+
+  /* 🔴 一筆一張卡，⛔ 不用寬表格。
+     軒徹 msg26222「應收明細的欄位有點多」＋ msg26224「我覺得每個欄位都蠻重要的　都各別有意義」
+     ⇒ 欄位一個都不砍，改用卡片把 14 欄排成三層，手機不必左右拉。 */
+  .it{background:var(--card);border:1px solid var(--line);border-radius:12px;
+      padding:11px 12px;margin-bottom:9px}
+  .it .top{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
+  .it .kind{background:var(--brand-soft);color:var(--brand);border-radius:999px;
+            padding:1px 9px;font-size:12px;font-weight:600;white-space:nowrap}
+  .it .name{font-weight:700;font-size:17px;margin:4px 0 2px;word-break:break-all}
+  .it .calc{font-size:14.5px;color:#333}
+  .it .amt{float:right;font-weight:700;font-size:17px}
+  .it .amt.neg{color:var(--bad)}
+  .it .meta{clear:both;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);
+            font-size:12.5px;color:var(--muted);display:grid;
+            grid-template-columns:auto 1fr;gap:2px 10px}
+  .it .meta b{font-weight:600;color:#555;white-space:nowrap}
+  .it .meta span{word-break:break-all}
+
+  .sum{position:fixed;left:0;right:0;bottom:0;background:var(--card);
+       border-top:1px solid var(--line);padding:12px 14px calc(env(safe-area-inset-bottom) + 12px);
+       display:flex;justify-content:space-between;align-items:baseline;font-size:16px}
+  .sum b{font-size:21px;color:var(--brand)}
+  .sum b.neg{color:var(--bad)}
+  .msg{border-radius:10px;padding:11px 12px;margin-bottom:10px;font-size:14.5px;display:none}
+  .msg.warn{display:block;background:#fff6e6;border:1px solid #f0d49a;color:var(--warn)}
+  .msg.bad{display:block;background:#fdecea;border:1px solid #f3b7b0;color:var(--bad)}
+  .empty{text-align:center;color:var(--muted);padding:40px 12px;font-size:15px}
+</style>
+</head>
+<body>
+<header>
+  <div class="t">帳單
+    <small id="sub">讀取中…</small>
+  </div>
+</header>
+<main>
+  <div id="msg" class="msg"></div>
+  <div class="pick">
+    <select id="pPeriod"></select>
+    <select id="pStore" style="display:none"></select>
+  </div>
+  <div id="list"></div>
+</main>
+<div class="sum"><span id="sumLabel">合計</span><b id="sumVal">—</b></div>
+
+<script>
+var ENDPOINT = "https://hook.aemassinc.net/xq";
+function qs(k){
+  var m = new RegExp("[?&]"+k+"=([^&]*)").exec(window.location.search);
+  return m ? decodeURIComponent(m[1].replace(/\+/g," ")) : "";
+}
+var Q_UID = qs("u"), Q_SIG = qs("s"), Q_STORE = qs("store");
+var DATA = null, PERIOD = qs("period") || "", STORE = Q_STORE || "";
+
+function esc(s){
+  return String(s === null || s === undefined ? "" : s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+function say(kind, html){
+  var el = document.getElementById("msg");
+  el.className = "msg" + (kind ? " " + kind : "");
+  el.innerHTML = html || "";
+}
+/* 千分位。⛔ 不用 toLocaleString：不同機型的分組與負號位置不一致。 */
+function money(n){
+  var v = Number(n || 0), neg = v < 0;
+  var s = Math.abs(v).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return (neg ? "-" : "") + s;
+}
+function num(n){
+  var v = Number(n || 0);
+  return (Math.round(v * 1000) / 1000).toString();
+}
+
+function render(){
+  var d = DATA, list = document.getElementById("list");
+  document.getElementById("sub").textContent =
+    d.label + "　共 " + d.count + " 筆";
+
+  if(!d.rows.length){
+    list.innerHTML = '<div class="empty">這一期還沒有任何帳單資料。<br>'
+      + '之後有進貨或調撥，就會逐條出現在這裡。</div>';
+  }else{
+    var h = "";
+    for(var i=0;i<d.rows.length;i++){
+      var r = d.rows[i], neg = Number(r.amount) < 0;
+      h += '<div class="it">'
+        +   '<div class="top"><span>' + esc(r.date) + '</span>'
+        +     '<span class="kind">' + esc(r.kind || "—") + '</span></div>'
+        +   '<div class="name">' + esc(r.item || "—") + '</div>'
+        +   '<div><span class="amt' + (neg ? " neg" : "") + '">'
+        +     money(r.amount) + '</span>'
+        +     '<span class="calc">' + num(r.qty) + ' ' + esc(r.unit || "")
+        +       ' × ' + money(r.price) + '</span></div>'
+        +   '<div class="meta">'
+        +     '<b>單號</b><span>' + esc(r.order_no || "—") + '</span>'
+        +     '<b>貨號</b><span>' + esc(r.code || "—") + '</span>'
+        +     '<b>店別</b><span>' + esc(r.store_no || "") + ' ' + esc(r.store || "") + '</span>'
+        +     '<b>進貨人</b><span>' + esc(r.who || "—") + '</span>'
+        +     '<b>進貨時間</b><span>' + esc(r.when || "—") + '</span>'
+        +     '<b>備註</b><span>' + esc(r.note || "—") + '</span>'
+        +   '</div>'
+        + '</div>';
+    }
+    list.innerHTML = h;
+  }
+
+  document.getElementById("sumLabel").textContent = "本期合計（" + d.count + " 筆）";
+  var sv = document.getElementById("sumVal");
+  sv.textContent = money(d.total);
+  sv.className = Number(d.total) < 0 ? "neg" : "";
+
+  /* 期別下拉。⛔ 後端只給「到今天為止」的期別，這裡不要自己補未來的月份。 */
+  var ps = document.getElementById("pPeriod");
+  if(!ps.options.length){
+    var oh = "";
+    for(var j=0;j<d.periods.length;j++){
+      oh += '<option value="' + esc(d.periods[j].id) + '">'
+          + esc(d.periods[j].label) + '</option>';
+    }
+    ps.innerHTML = oh;
+  }
+  ps.value = d.period;
+
+  /* 綁了兩家以上才顯示店別下拉；只有一家就不要多一顆沒得選的選單。 */
+  var stores = {}, order = [];
+  for(var k=0;k<d.rows.length;k++){
+    var key = d.rows[k].store_no;
+    if(!stores[key]){ stores[key] = d.rows[k].store; order.push(key); }
+  }
+  var ss = document.getElementById("pStore");
+  if(order.length > 1){
+    if(!ss.options.length){
+      var sh = '<option value="">全部店別</option>';
+      for(var m=0;m<order.length;m++){
+        sh += '<option value="' + esc(order[m]) + '">' + esc(stores[order[m]]) + '</option>';
+      }
+      ss.innerHTML = sh;
+    }
+    ss.value = STORE || "";
+    ss.style.display = "";
+  }
+}
+
+function load(){
+  if(!Q_UID || !Q_SIG){
+    document.getElementById("sub").textContent = "缺少身分資訊";
+    say("warn", "此連結缺少身分資訊，無法顯示帳單。<br>請返回 LINE 重新點選「<b>帳單</b>」。");
+    return;
+  }
+  var url = ENDPOINT+"/billing?u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG)
+          + (STORE ? "&store="+encodeURIComponent(STORE) : "")
+          + (PERIOD ? "&period="+encodeURIComponent(PERIOD) : "");
+  fetch(url).then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok){ throw new Error(d.error || "讀不到資料"); }
+      DATA = d; PERIOD = d.period; say("", ""); render();
+    })
+    .catch(function(e){
+      document.getElementById("sub").textContent = "讀取失敗";
+      say("bad", "帳單讀取失敗：" + esc(e.message));
+    });
+}
+
+document.getElementById("pPeriod").addEventListener("change", function(){
+  PERIOD = this.value; load();
+});
+document.getElementById("pStore").addEventListener("change", function(){
+  STORE = this.value; load();
+});
+load();
+</script>
+</body>
+</html>
