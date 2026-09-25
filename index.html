@@ -279,6 +279,10 @@ const DEMO_ITEMS = [
 let ITEMS = DEMO_ITEMS.map(x=>({code:"", n:x.n, s:x.s, moq:x.moq, u:x.u,
                                 box:x.p*x.moq, due:""}));
 let qty = new Array(ITEMS.length).fill(0);
+/* 🔴 空清單的文案由**後端欄位**帶（`empty_reason`），⛔ 前端不寫死：
+   今天空清單＝「尚未提供商品」，但以後「暫停叫貨」也會是空清單，那時要顯示別句話。
+   （同 `prefill` 用貨號對不用順序對的理由：判準要讀欄位。） */
+let EMPTY_REASON = "";
 
 function fmt(n){ return (Math.round(n*100)/100).toLocaleString("en-US"); }
 function today(){ const d=new Date(); return (d.getMonth()+1)+"/"+d.getDate(); }
@@ -316,6 +320,17 @@ function amountOf(i,v){ const it=ITEMS[i];
 
 function render(){
   const tb=document.getElementById("tb"); tb.innerHTML="";
+  if(!ITEMS.length){
+    /* 🔴 空清單一定要說話（軒徹 2026-09-26 msg27247 回「要」）。
+       ⛔ 不可以留一張空表格：空表格跟「還在載入」長得一模一樣，店員會一直等下去。
+       ⛔ 也不可以留著 DEMO 品項——那會讓他對著假品項下單。 */
+    tb.innerHTML = '<tr><td colspan="3" class="note" '
+                 + 'style="text-align:center;padding:28px 8px">'
+                 + (EMPTY_REASON || "尚未提供商品") + '</td></tr>';
+    document.getElementById("submitBtn").disabled = true;
+    document.getElementById("total").textContent = "0";
+    return;
+  }
   ITEMS.forEach((it,i)=>{
     /* 規格寫法（軒徹 msg 24529 指定）：每包幾隻 * 每箱幾包。例：10隻/包*8/箱、2隻/包*36/箱。
        🔴 品名底下**不顯示單價**（軒徹 2026-09-16 03:09 msg 24536）。
@@ -447,6 +462,7 @@ render(); setRole("store");
                               +"（下面是假品項，不要用）"); return; }
       ITEMS = j.items.map(it=>({code:it.code, n:it.name, s:it.spec, moq:it.moq,
                                 u:it.unit, box:it.box_price, due:it.due}));
+      EMPTY_REASON = j.empty_reason || "";
       /* 今天已經下過的單 → 把數量預填回去（軒徹 2026-09-17 msg24872）。
          後端回的 prefill 是 {貨號: 數量}；⛔ 用貨號對，不要用順序對 ——
          品項順序會跟著 ERP 改，拿順序對會把數量填到別的品項那一列而且完全無聲。 */
