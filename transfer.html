@@ -730,5 +730,13 @@ function sendIn(){
 
 load();
 </script>
+<script>
+/* 底部固定列的高度會跟著手機字級放大；寫死的 body padding-bottom 在安卓大字級下會把最後幾列蓋住、滑不到
+   （軒徹 2026-09-29 msg27566 店家影片）。改成量它實際多高再留空間。 */
+(function(){var f=document.querySelector('.bar');if(!f)return;
+  function fit(){document.body.style.paddingBottom=(f.offsetHeight+16)+'px';}
+  fit();window.addEventListener('resize',fit);
+  if(window.ResizeObserver)new ResizeObserver(fit).observe(f);})();
+</script>
 </body>
 </html>
