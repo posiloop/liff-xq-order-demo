@@ -196,7 +196,9 @@ function render(){
     h = "";
     for(var q=0;q<groups.length;q++){
       var G = groups[q].rows, f = G[0], tr = /調撥/.test(f.kind || "");
-      var foot = [["進貨人","who"],["進貨時間","when"],["備註","note"]];
+      /* 進貨人／進貨時間**一律逐品項印**（軒徹 msg27843「每個品項可能不同時間」）：
+         同一張單的貨可以分批到、分別收，⛔ 不可收到卡尾只印一次。 */
+      var foot = [["備註","note"]];
       var perRow = [];
       h += '<details class="od"' + (openAll ? " open" : "") + '><summary><div class="hd">'
         +   '<div class="l1"><span>' + esc(md(f.date)) + '</span>'
@@ -208,6 +210,9 @@ function render(){
       for(var z=0;z<foot.length;z++){ if(shared(G, foot[z][1]) === null) perRow.push(foot[z]); }
       for(var y=0;y<G.length;y++){
         var R = G[y], neg = Number(R.amount) < 0, extra = [];
+        if(!R.who && !R.when) extra.push('進貨人／時間：<span class="nil">未登記</span>');
+        else extra.push("進貨人：" + (R.who ? esc(R.who) : '<span class="nil">未登記</span>')
+                      + "　" + (R.when ? esc(R.when) : '<span class="nil">時間未登記</span>'));
         for(var w=0;w<perRow.length;w++){
           var pv = R[perRow[w][1]];
           if(pv) extra.push(perRow[w][0] + "：" + esc(pv));
