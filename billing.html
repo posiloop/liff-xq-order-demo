@@ -191,8 +191,8 @@ function render(){
     list.innerHTML = '<div class="empty">這一期還沒有任何帳單資料。<br>'
       + '之後有進貨或調撥，就會逐條出現在這裡。</div>';
   }else{
-    /* 單少就全展開；單多（看全部店別時動輒二三十張）先收合，只看每張單的小計。 */
-    var openAll = groups.length <= 6;
+    /* 一律預設收合，只看每張單的小計，點開才看品項（軒徹 msg27846「預設讓他們收起 不要展開」）。 */
+    var openAll = false;
     h = "";
     for(var q=0;q<groups.length;q++){
       var G = groups[q].rows, f = G[0], tr = /調撥/.test(f.kind || "");
