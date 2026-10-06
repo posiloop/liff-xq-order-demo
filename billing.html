@@ -78,6 +78,10 @@
        display:flex;justify-content:space-between;align-items:baseline;font-size:16px}
   .sum b{font-size:21px;color:var(--brand)}
   .sum b.neg{color:var(--bad)}
+  /* 股東95折／上期扣抵（軒徹 2026-10-06 msg29207 圈的那格：標題與合計中間） */
+  .sum .adj{flex:1;text-align:right;padding:0 8px;font-size:12px;line-height:1.45;color:var(--muted)}
+  .sum #sumLabel{white-space:nowrap}
+  .sum .adj s{color:var(--muted)}
   .msg{border-radius:10px;padding:11px 12px;margin-bottom:10px;font-size:14.5px;display:none}
   .msg.warn{display:block;background:#fff6e6;border:1px solid #f0d49a;color:var(--warn)}
   .msg.bad{display:block;background:#fdecea;border:1px solid #f3b7b0;color:var(--bad)}
@@ -99,7 +103,7 @@
   <div id="digest"></div>
   <div id="list"></div>
 </main>
-<div class="sum"><span id="sumLabel">合計</span><b id="sumVal">—</b></div>
+<div class="sum"><span id="sumLabel">合計</span><span class="adj" id="sumAdj"></span><b id="sumVal">—</b></div>
 
 <script>
 var ENDPOINT = "https://hook.aemassinc.net/xq";
@@ -241,9 +245,24 @@ function render(){
   }
 
   document.getElementById("sumLabel").textContent = "本期合計（" + groups.length + " 張單）";
+  /* 股東95折只套在最外面這一格（軒徹 2026-10-06 msg29205）：上面的單據卡與小計都是原價，
+     這裡列出原價、折扣、扣抵，右邊顯示折後應付。後端沒給 adjustments（舊版）就照原價顯示。 */
+  var adj = d.adjustments || [], ah = "";
+  var due = (d.due === undefined || d.due === null) ? d.total : d.due;
+  if(adj.length){
+    var many = {};
+    for(var a=0;a<adj.length;a++){ many[adj[a].store_no] = 1; }
+    var tag = Object.keys(many).length > 1;
+    ah = '<span style="white-space:nowrap">原價 ' + money(d.total) + '</span>';
+    for(var a2=0;a2<adj.length;a2++){
+      var nm = tag && STORES && STORES.name[adj[a2].store_no] ? STORES.name[adj[a2].store_no] + ' ' : '';
+      ah += '<br><span style="white-space:nowrap">' + esc(nm + adj[a2].label) + ' -' + money(-adj[a2].amount) + '</span>';
+    }
+  }
+  document.getElementById("sumAdj").innerHTML = ah;
   var sv = document.getElementById("sumVal");
-  sv.textContent = money(d.total);
-  sv.className = Number(d.total) < 0 ? "neg" : "";
+  sv.textContent = money(due);
+  sv.className = Number(due) < 0 ? "neg" : "";
 
   /* 期別下拉。⛔ 後端只給「到今天為止」的期別，這裡不要自己補未來的月份。 */
   var ps = document.getElementById("pPeriod");
