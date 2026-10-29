@@ -217,19 +217,16 @@ function ymd(s){
   var dt = new Date(+p[0], +p[1]-1, +p[2]);
   return {m:(+p[1])+"月", d:String(+p[2]), w:WD[dt.getDay()]};
 }
-/* 🔴 方案C（軒徹 2026-10-29 msg34706）：調撥的錢照「收貨那家店自己的價」記（特價店照特價），
-   中轉倉自 9 月起不記帳。⇒ 調出頁的預估要用**會被記帳那一方**的價（軒徹 msg34753：
-   中轉倉調給中科土雞肉丁寫 9,000、實際中科記 8,400）。
-   ・調給中轉倉（退回）⇒ 記在本店，用本店價
-   ・其他 ⇒ 記在調入方，用 `box_in[調入方]`（後端只放跟本店不同價的那幾家），沒有就是同價
+/* 🔴 方案C（軒徹 2026-10-29 msg34706）：調撥兩邊各用自己的價記帳（特價店照特價），中轉倉自 9 月起不記帳。
+   軒徹 2026-10-30 msg34760：「調出店應該顯示的是自己會扣多少帳，調入店那端要顯示自己會增加多少帳」
+   ⇒ 調出頁一律用**本店**的價（＝後端調出腿 `_price()`），⛔ 不用對方的價（f02d8d4 那版用 box_in 是錯的）；
+     調入那端的金額在調入頁用調入方單價（d2d6918）。中轉倉調出 ⇒ 不記帳，不印金額。
    只給人看；寫表的金額一律後端重算。 */
-function boxFor(it){
-  if(!it) return null;
-  var b = (TO_SEL && TO_SEL !== "0000" && it.box_in) ? it.box_in[TO_SEL] : null;
-  if(b && b[0] && b[1]) return {box:b[0], moq:b[1]};
-  return (it.box_price && it.moq) ? {box:it.box_price, moq:it.moq} : null;
+function noLedger(){ return DATA.store_no === "0000"; }
+function estFor(it, qty){
+  if(!it || noLedger() || !it.box_price || !it.moq) return null;
+  return (Number(qty)/it.moq) * it.box_price;
 }
-function estFor(it, qty){ var b = boxFor(it); return b ? (Number(qty)/b.moq) * b.box : null; }
 function money(n){
   if(n === null || n === undefined || n === "") return "";
   return "$" + Number(n).toLocaleString("en-US", {maximumFractionDigits:0});
@@ -329,7 +326,7 @@ function renderOut(){
        （他逐字「數量不用照moq」）。⇒ 只留預估金額。
        ⛔ 沒有東西可印就整個 div 不要輸出，不要留一條空白的線。 */
     if(ln.qty !== "" && estFor(it, ln.qty) !== null){
-      h += '<div class="amt">預估 '
+      h += '<div class="amt">預估扣 '
         +  money(estFor(it, ln.qty))
         +  '</div>';
     }
@@ -480,10 +477,10 @@ function tally(){
       var it = byCode(ln.code);
       var e1 = estFor(it, ln.qty);
       if(e1 !== null){ est += e1; }
-      else { unknown++; }
+      else if(!noLedger()){ unknown++; }
     });
     s.innerHTML = "已填 <b>"+n+"</b> 項"
-      + (est ? "　預估 "+money(est) : "")
+      + (noLedger() ? "　中轉倉不記帳" : (est ? "　本店預估扣 "+money(est) : ""))
       + (unknown ? '　<span style="color:#b06a00">'+unknown+' 項算不出金額</span>' : "");
     btn.disabled = false;
     return;
@@ -556,15 +553,12 @@ function reviewOut(entries){
   entries.forEach(function(e){
     h += '<div class="l"><span class="nm">'+esc(e.name)+'<small>'+esc(e.spec)+'</small></span>'
       +  '<span class="q">'+esc(e.qty)+' '+esc(e.unit)
-      +  (e.est === null ? '<em>金額待確認</em>' : '<em>'+esc(money(e.est))+'</em>')
+      +  (noLedger() ? '' : (e.est === null ? '<em>金額待確認</em>' : '<em>−'+esc(money(e.est))+'</em>'))
       +  '</span></div>';
   });
-  /* 金額記在誰身上要講出來：中轉倉調出時中轉倉不記帳，畫面上的金額是**對方**的帳。 */
-  var who = (TO_SEL === "0000") ? (DATA.store_no+" "+DATA.store_name) : toName;
   h += '</div><div class="hint">送出後會開一張調撥單給對方。'
     +  '<b>對方完成調入之前，兩邊的帳都不會動。</b>'
-    +  '<br>上面的金額記在 '+esc(who)+'。'
-    +  (DATA.store_no === "0000" ? '中轉倉不記帳。' : '')
+    +  (noLedger() ? '<br>中轉倉不記帳。' : '<br>上面是本店（'+esc(DATA.store_no+" "+DATA.store_name)+'）會扣的帳；對方會增加多少，以對方自己的價為準。')
     +  '</div>';
   document.getElementById("pane").innerHTML = h;
   window.scrollTo(0, 0);
