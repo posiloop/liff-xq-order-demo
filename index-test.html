@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>享奇雞 叫貨系統（測試版）</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root{
+    --bg:#f5f5f3; --card:#fff; --line:#e0ddd8; --ink:#1c1c1c; --muted:#6b6b6b;
+    --brand:#d97706; --brand-soft:#fff7e8; --ok:#0f7b3f; --bad:#b42318;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  /* 🔴 連點加減太快時整頁會放大（軒徹 2026-09-16 02:47 msg 24534 回報）。
+     根因是手機瀏覽器的「連點兩下＝放大」，不是我的程式做了什麼。
+     touch-action:manipulation ＝ 這顆元素上的連點不要進放大手勢，一般捲動縮放不受影響。
+     ⛔ 不要改用 maximum-scale／user-scalable=no —— iOS 10 起 Safari 直接忽略那兩個，
+        而且那是把**整頁**的縮放關掉，會害看不清楚的人沒辦法自己放大。 */
+  button,.stp,input,select{touch-action:manipulation}
+  /* 🔴 手機上任何一欄被切掉都很難發現（截圖才看得到）。這兩行是硬防線：
+     頁面永遠不准比視窗寬，表格改固定版面、欄寬自己指定。 */
+  html,body{max-width:100%;overflow-x:hidden}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",system-ui,sans-serif;
+       font-size:16px;line-height:1.55;padding-bottom:96px}
+  header{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;
+         padding:calc(env(safe-area-inset-top) + 12px) 14px 12px;
+         display:flex;align-items:center;gap:10px}
+  header .t{font-weight:700;font-size:17px;flex:1;min-width:0}
+  header .t small{display:block;font-weight:400;opacity:.9;font-size:12.5px}
+  .iconbtn{background:rgba(255,255,255,.18);border:0;color:#fff;width:38px;height:38px;
+           border-radius:10px;font-size:19px;line-height:1;cursor:pointer}
+  .demo-bar{background:#1c1c1c;color:#ffd48a;font-size:12.5px;padding:8px 12px;
+            text-align:center;line-height:1.5}
+  .demo-bar b{color:#fff}
+  main{padding:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+        padding:14px;margin-bottom:12px}
+  .meta{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--muted);font-size:13.5px}
+  .meta b{color:var(--ink)}
+  table{width:100%;table-layout:fixed;border-collapse:collapse;background:var(--card);
+        border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{padding:9px 6px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}
+  th{background:#f0efec;font-weight:600;font-size:13px;color:#444}
+  td.num,th.num{text-align:right;white-space:nowrap}
+  tr:last-child td{border-bottom:0}
+  .name{font-weight:600}
+  .spec{color:var(--muted);font-size:12.5px}
+  /* 每一小段自己不斷行，⛔ 不要讓「$2,080/箱」被拆成「$2,080/」＋「箱」——
+     拆開之後那個「箱」會貼在下一行開頭，看起來像另一個欄位。 */
+  .spec span{white-space:nowrap}
+  input[type=number]{width:100%;max-width:48px;padding:8px 4px;border:1.5px solid var(--line);border-radius:8px;
+                     font-size:16px;text-align:center;background:#fff}
+  /* 數量欄＝〔−〕〔輸入〕〔＋〕。加減一次跳一個 MOQ 倍數（MOQ 欄已拿掉，倍數規則改用按鈕表達）。
+     🔴 flex 的子元素預設會被壓縮，手機上按鈕會縮成一條 —— 三個都要 flex:0 0 auto。 */
+  /* 「數量」表頭要對齊下面那組〔−〕〔格子〕〔＋〕（軒徹 2026-09-16 03:09 msg 24536）。
+     🔴 表頭靠右、下面那組也靠右，看起來還是沒對齊——因為對齊的是「整組的右緣」，
+        眼睛看的卻是**中間那個輸入格**。兩邊一律改置中，對的才是同一個基準。 */
+  th.qty{text-align:center}
+  .qtybox{display:flex;align-items:center;justify-content:center;gap:3px}
+  .qtybox input[type=number]{flex:0 0 auto}
+  /* 單位（包／桶）直接貼在數字旁邊：input type=number 裡面塞不了字，只能放在外面。
+     ⛔ 不改成 type=text 去湊「8 包」—— 那會讓手機跳出全鍵盤而不是數字鍵盤。 */
+  .unit{flex:0 0 auto;color:var(--muted);font-size:12.5px;white-space:nowrap}
+  .stp{flex:0 0 auto;width:34px;height:40px;padding:0;border:1.5px solid var(--line);border-radius:9px;
+       background:#fff;color:var(--ink);font-size:21px;line-height:1;cursor:pointer}
+  .stp:active{background:var(--brand-soft);border-color:var(--brand)}
+  input[type=number]:focus{outline:0;border-color:var(--brand);background:var(--brand-soft)}
+  .moqbad{border-color:var(--bad)!important;background:#fef4f2!important}
+  .rowmsg{color:var(--bad);font-size:12px;display:none}
+  .rowmsg.show{display:block}
+  .foot{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
+        padding:10px 14px calc(env(safe-area-inset-bottom) + 10px);z-index:20}
+  .sum{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;font-size:14px}
+  .sum .big{font-size:20px;font-weight:700}
+  button.primary{width:100%;padding:14px;border:0;border-radius:12px;background:var(--brand);
+                 color:#fff;font-size:17px;font-weight:700;cursor:pointer}
+  button.primary:disabled{background:#c9c5bf}
+  button.ghost{width:100%;padding:12px;border:1.5px solid var(--line);border-radius:12px;
+               background:#fff;font-size:15px;cursor:pointer;margin-top:8px}
+  .screen{display:none} .screen.on{display:block}
+  .center{text-align:center;padding:44px 20px}
+  .center h2{margin:14px 0 6px;font-size:19px}
+  .center p{color:var(--muted);margin:0 0 18px}
+  .big-emoji{font-size:46px}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12.5px;
+        background:var(--brand-soft);color:#a45500;border:1px solid #f0d9ae}
+  .pending{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+  .pending .who{font-weight:600}
+  .pending .sub{color:var(--muted);font-size:13px}
+  .row2{display:flex;gap:8px;margin-top:8px}
+  .row2 button{flex:1;padding:10px;border-radius:9px;border:1.5px solid var(--line);
+               background:#fff;font-size:14px;cursor:pointer}
+  .row2 .yes{background:var(--ok);border-color:var(--ok);color:#fff}
+  .row2 .no{color:var(--bad)}
+  select{width:100%;padding:11px;border:1.5px solid var(--line);border-radius:9px;font-size:15px;background:#fff}
+  .h3{font-weight:700;margin:18px 0 8px;font-size:15px}
+  .note{color:var(--muted);font-size:12.5px;margin-top:6px}
+  /* 軒徹 msg26509：「截圖紀錄」四個字要大、顏色要明顯 */
+  .note-shot{color:var(--bad);font-size:20px;font-weight:800;letter-spacing:1px;margin-top:6px}
+  .done-box{background:var(--brand-soft);border:1.5px solid var(--brand);border-radius:12px;padding:16px}
+  /* ───── 貨款未付通知（測試版·軒徹 2026-10-29 msg34650）───── */
+  .unpaid-mask{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.55);
+               display:flex;align-items:center;justify-content:center;padding:20px}
+  .unpaid-box{background:#fff;border-radius:16px;width:100%;max-width:360px;overflow:hidden;
+              box-shadow:0 12px 40px rgba(0,0,0,.3)}
+  .unpaid-box .hd{background:var(--bad);color:#fff;padding:16px 18px;font-size:19px;font-weight:700}
+  .unpaid-box .bd{padding:16px 18px;font-size:15px}
+  .unpaid-box table{border:0;margin:10px 0 12px;table-layout:auto;width:100%;border-radius:0}
+  .unpaid-box td:last-child{text-align:right;white-space:nowrap}
+  .unpaid-box td{padding:7px 4px;font-size:15px;width:auto}
+  .unpaid-box .sum{display:flex;justify-content:space-between;font-weight:700;font-size:17px;
+                    border-top:2px solid var(--ink);padding:8px 4px 0;margin:-6px 0 14px}
+  .unpaid-box .warn{background:#fdecea;color:var(--bad);border-radius:10px;padding:10px 12px;
+                    font-weight:700;line-height:1.6}
+  .unpaid-box button{display:block;width:calc(100% - 36px);margin:0 18px 18px;padding:13px;border:0;
+                     border-radius:12px;background:var(--ink);color:#fff;font-size:16px;font-weight:700}
+</style>
+</head>
+<body>
+
+<div class="demo-bar" id="demoBar">
+  <b>雛形展示</b>·資料是假的、送出不會進系統<br>切換身分看不同畫面
+  <select id="roleSel" style="width:auto;display:inline-block;padding:2px 6px;font-size:12px;margin-left:6px">
+    <option value="store">店長（江南店）</option>
+    <option value="new">第一次進來的人</option>
+    <option value="admin">管理員</option>
+  </select>
+</div>
+
+<header>
+  <div class="t">享奇雞 叫貨<small id="hdrSub">台北江南店</small></div>
+  <button class="iconbtn" id="gearBtn" title="設定" style="display:none">⚙</button>
+</header>
+
+<!-- ① 店長：填叫貨單 -->
+<section class="screen on" id="scrOrder">
+  <main>
+    <div class="card">
+      <div class="meta">
+        <span>叫貨日 <b id="dOrder">—</b></span>
+        <span>最晚到貨日 <b id="dArrive">—</b></span>
+        <span>單號 <b id="dNo">—</b></span>
+      </div>
+    </div>
+    <table>
+      <thead><tr>
+        <th style="width:40%">品項</th><th class="qty" style="width:40%">數量</th><th class="num" style="width:20%">小計</th>
+      </tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+    <div class="note" id="demoNote" style="margin-top:10px">※ 以上為<b>範例品項</b>，正式版會帶出該店真正的可叫品項。</div>
+  </main>
+  <div class="foot">
+    <div class="sum"><span>合計</span><span class="big">$<span id="total">0</span></span></div>
+    <button class="primary" id="submitBtn" disabled>填寫完畢，送出</button>
+  </div>
+</section>
+
+<!-- ② 送出後 -->
+<section class="screen" id="scrDone">
+  <main>
+    <div class="center">
+      <div class="big-emoji">✅</div>
+      <h2>已送出</h2>
+      <!-- 2026-09-21 軒徹 msg25996（截圖圈起來那段）：原本是「管理員那邊已經收到，
+           不用再回『填寫完畢』了。」⇒ 改成講「還能改到幾點」。
+           🔴 這行是**承諾**不是說明：上面寫幾點到幾點，系統就要真的擋在那個區間外。
+              現在的閘是 `~/.claude/state/xq-liff-schedule.txt`（不存在＝不限時段），
+              ⛔ 該檔沒設好之前，這行等於寫了一張系統不認的支票。 -->
+      <p>當日 09:00～20:00 都能再修改</p>
+    </div>
+    <div class="done-box">
+      <div style="font-weight:700;margin-bottom:6px"><span id="doneStore">台北江南店</span> 叫貨單</div>
+      <div class="meta" style="margin-bottom:12px">
+        <span>單號 <b id="dNo2">—</b></span><span>合計 <b>$<span id="total2">0</span></b></span>
+      </div>
+      <!-- 2026-09-19 軒徹 msg25314/25316：原本這裡是一顆「下載叫貨單 PDF」的**假鈕**
+           （按下去只跳「雛形展示」四個字）。他選 1「單純給下單的人看」⇒ 改成看網頁版。
+           🔴 ⛔ 不要改回出 PDF：叫貨單是需求憑證、還會改，送出當下出的 PDF 隔一次改單就過期，
+              而過期的紙看起來完全正常。PDF 要等驗收那關把量定案之後才有意義。 -->
+      <button class="ghost" onclick="openView()">📄 看這張單</button>
+    </div>
+    <!-- 2026-09-21 軒徹 msg25996：「回去看填的內容」⇒「返回修改訂單」。
+         🔴 字面變成「修改」之後這顆鈕就有責任了：按回去必須真的能改並重送。
+            **已查過碼，做得到**：`show()` 只切畫面、`qty[]` 原封不動留著，
+            改完再按「填寫完畢，送出」會再 POST 一次，後端有取代邏輯（舊列標「已取代」）。
+            ⛔ 之後若有人把回程改成唯讀，這個標籤就變成謊話，要一起改回來。 -->
+    <button class="ghost" onclick="show('scrOrder')">← 返回修改訂單</button>
+  </main>
+</section>
+
+<!-- ②-b 看這張單（現讀，不是送出當下的快照） -->
+<section class="screen" id="scrView">
+  <main>
+    <div class="done-box">
+      <div style="font-weight:700;margin-bottom:6px"><span id="vStore">—</span> 叫貨單</div>
+      <div class="meta" style="margin-bottom:10px">
+        <span>單號 <b id="vNo">—</b></span><span id="vDateWrap">日期 <b id="vDate">—</b></span>
+      </div>
+      <div id="vBody">讀取中…</div>
+      <div class="meta" style="margin-top:10px;justify-content:flex-end">
+        <span>合計 <b>$<span id="vTotal">0</span></b></span>
+      </div>
+      <!-- 🔴 講清楚這頁是「現在的樣子」，否則他改完單再打開會以為系統沒更新。
+           文案由軒徹 2026-09-23 msg26509 指定，⛔ 不要自行潤飾。 -->
+      <div class="note" style="margin-top:8px">請確認內容！當日結單前，再叫貨會取代前次叫貨。</div>
+      <div class="note-shot">截圖紀錄！</div>
+    </div>
+    <button class="ghost" onclick="show('scrDone')">← 回上一頁</button>
+  </main>
+</section>
+
+<!-- ③ 第一次進來的人：申請權限 -->
+<section class="screen" id="scrApply">
+  <main>
+    <div class="center">
+      <div class="big-emoji">🔒</div>
+      <h2>需要先開通</h2>
+      <p>你還沒有叫貨權限。<br>送出申請後，由管理員確認你是哪一間店。</p>
+    </div>
+    <div class="card">
+      <div class="h3">你是哪一間店？</div>
+      <select id="applyStore">
+        <option>台北江南店</option><option>台北瑞湖店</option><option>台北昆陽店</option>
+        <option>新北中和店</option><option>台中逢甲店</option><option>台北錦州店</option>
+        <option>台南永華店</option><option>汐止中興店</option>
+      </select>
+      <div class="note">送出後管理員會在「設定」裡看到你的申請。通過之前進不來。</div>
+      <button class="primary" style="margin-top:12px"
+        onclick="alert('雛形展示：正式版會把申請送給管理員審核。');">送出申請</button>
+    </div>
+  </main>
+</section>
+
+<!-- ④ 軒徹：設定 -->
+<section class="screen" id="scrAdmin">
+  <main>
+    <div class="card">
+      <div style="font-weight:700">設定<span class="pill" style="margin-left:8px">只有你看得到</span></div>
+      <div class="note">這個齒輪只有你（和哲安）點得進來，店長點不到。</div>
+    </div>
+
+    <div class="h3">待審核的申請（2）</div>
+    <div class="pending">
+      <div class="who">阿修</div>
+      <div class="sub">申請：台北江南店 · 今天 16:40</div>
+      <div class="row2">
+        <button class="yes" onclick="alert('雛形展示：通過後他就能進來叫貨。')">通過</button>
+        <button class="no" onclick="alert('雛形展示：拒絕後他仍然進不來。')">拒絕</button>
+      </div>
+    </div>
+    <div class="pending">
+      <div class="who">昆陽店-小美</div>
+      <div class="sub">申請：台北昆陽店 · 今天 15:02</div>
+      <div class="row2">
+        <button class="yes" onclick="alert('雛形展示')">通過</button>
+        <button class="no" onclick="alert('雛形展示')">拒絕</button>
+      </div>
+    </div>
+
+    <div class="h3">已開通的人</div>
+    <div class="pending"><div class="who">江南店-陳店長</div><div class="sub">台北江南店</div></div>
+    <div class="pending"><div class="who">瑞湖店-曾店長</div><div class="sub">台北瑞湖店</div></div>
+    <div class="note">每個 LINE 帳號綁一間店，點進來就只看得到自己那張。</div>
+
+    <button class="ghost" style="margin-top:16px" onclick="show('scrOrder')">← 回叫貨畫面</button>
+  </main>
+</section>
+
+<script>
+/* ───────── 品項來源 ─────────────────────────────────────────────────────
+   🔴 **正式**（軒徹 2026-09-19 msg25289/25292「把 liff 接上正式檔／你把複製的副本刪除」）：
+      讀的是**正式 ERP**（即時，不吃快取），送出寫的是**正式叫貨紀錄**的「叫貨明細」。
+      ⚠️ 送出去就是真單，會進應收／應付。兩本副本已刪。
+   🔴 網址沒帶身分（u/s）時**不抓真資料、也不假裝有資料** —— 退回雛形假品項
+      並在橫幅講明。⛔ 不可讓「沒帶身分」長得跟「這家店沒品項」一樣。 */
+var ENDPOINT = "https://hook.aemassinc.net/xq";
+function qs(k){
+  var m = new RegExp("[?&]"+k+"=([^&]*)").exec(window.location.search);
+  return m ? decodeURIComponent(m[1].replace(/\+/g," ")) : "";
+}
+const Q_UID=qs("u"), Q_SIG=qs("s"), Q_STORE=qs("store");
+const LIVE = !!(Q_UID && Q_SIG && Q_STORE);
+
+/* 雛形假品項：只在沒帶身分時才會用到（p＝單價，僅雛形用） */
+const DEMO_ITEMS = [
+  {n:"土雞肉丁", s:"1Kg/包",  moq:12, u:"包", p:62},
+  {n:"熟筍絲",   s:"600g/包", moq:20, u:"包", p:59},
+  {n:"T6骨腿(2入)", s:"1Kg/包", moq:36, u:"包", p:93},
+  {n:"迷迭雞胸", s:"100g/包", moq:80, u:"包", p:28},
+  {n:"雞翅",     s:"1.2Kg/包", moq:8,  u:"包", p:200},
+  {n:"飯醬",     s:"22Kg/桶",  moq:1,  u:"桶", p:2200},
+];
+let ITEMS = DEMO_ITEMS.map(x=>({code:"", n:x.n, s:x.s, moq:x.moq, u:x.u,
+                                box:x.p*x.moq, due:""}));
+let qty = new Array(ITEMS.length).fill(0);
+/* 🔴 空清單的文案由**後端欄位**帶（`empty_reason`），⛔ 前端不寫死：
+   今天空清單＝「尚未提供商品」，但以後「暫停叫貨」也會是空清單，那時要顯示別句話。
+   （同 `prefill` 用貨號對不用順序對的理由：判準要讀欄位。） */
+let EMPTY_REASON = "";
+
+function fmt(n){ return (Math.round(n*100)/100).toLocaleString("en-US"); }
+function today(){ const d=new Date(); return (d.getMonth()+1)+"/"+d.getDate(); }
+function plusDays(k){ const d=new Date(); d.setDate(d.getDate()+k); return (d.getMonth()+1)+"/"+d.getDate(); }
+
+/* ───────── 「隔周五」→ 真的日期（軒徹 2026-09-16 02:30 msg 24529）─────────
+   ERP 那欄存的是相對講法（隔周五／本週三…），店長看到要的是「幾月幾號」。
+   隔週＝下週（本週一 +7 天那一週）。
+   🔴 轉不出來就**原字照顯示**，⛔ 不可自己編一個日期 —— 編出來的日期長得跟真的一樣，
+      錯了沒有人看得出來，比直接顯示「隔周五」危險得多。 */
+const WD = {"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"日":7,"天":7};
+function dueInfo(txt){
+  const raw = String(txt||"").trim();
+  if(!raw) return {label:"", t:null};
+  const m = /^(本|這|下|隔)\s*[週周]\s*([一二三四五六日天])$/.exec(raw);
+  if(!m) return {label:raw, t:null};          // 認不得就照原字，不猜
+  const now = new Date();
+  // 本週一（把週日當一週的最後一天）
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay()+6)%7));
+  d.setDate(d.getDate() + ((m[1]==="本"||m[1]==="這") ? 0 : 7) + (WD[m[2]]-1));
+  return {label:(d.getMonth()+1)+"/"+d.getDate(), t:d.getTime()};
+}
+/* 表頭「最晚到貨日」＝所有品項裡最晚的那一個到貨日，跟每列用同一條規則算出來。
+   一個品項都轉不出日期時（例如雛形假品項沒有 due）才退回 +7 天。 */
+function refreshArrive(){
+  let best=null, lab="";
+  ITEMS.forEach(it=>{ const di=dueInfo(it.due);
+    if(di.t!==null && (best===null || di.t>best)){ best=di.t; lab=di.label; } });
+  document.getElementById("dArrive").textContent = lab || plusDays(7);
+}
+/* 🔴 金額算法跟後端與叫貨表同一條：(數量 ÷ MOQ) × 成箱價。
+   ⛔ 不可寫成 數量 × 單價 —— 那是雛形的算法，跟表上的公式對不起來。 */
+function amountOf(i,v){ const it=ITEMS[i];
+  return (it.moq && it.box) ? (v/it.moq)*it.box : 0; }
+
+function render(){
+  const tb=document.getElementById("tb"); tb.innerHTML="";
+  if(!ITEMS.length){
+    /* 🔴 空清單一定要說話（軒徹 2026-09-26 msg27247 回「要」）。
+       ⛔ 不可以留一張空表格：空表格跟「還在載入」長得一模一樣，店員會一直等下去。
+       ⛔ 也不可以留著 DEMO 品項——那會讓他對著假品項下單。 */
+    tb.innerHTML = '<tr><td colspan="3" class="note" '
+                 + 'style="text-align:center;padding:28px 8px">'
+                 + (EMPTY_REASON || "尚未提供商品") + '</td></tr>';
+    document.getElementById("submitBtn").disabled = true;
+    document.getElementById("total").textContent = "0";
+    return;
+  }
+  ITEMS.forEach((it,i)=>{
+    /* 規格寫法（軒徹 msg 24529 指定）：每包幾隻 * 每箱幾包。例：10隻/包*8/箱、2隻/包*36/箱。
+       🔴 品名底下**不顯示單價**（軒徹 2026-09-16 03:09 msg 24536）。
+          it.box 仍然要留著 —— 小計與合計是 (數量÷MOQ)×成箱價算出來的，
+          ⛔ 不可因為「畫面不顯示」就把它從資料裡拿掉，那會讓金額變成 0。 */
+    const specTxt = it.s + (it.moq ? "*"+it.moq+"/箱" : "");
+    const dueTxt = dueInfo(it.due).label;
+    const tr=document.createElement("tr");
+    tr.innerHTML =
+      '<td><div class="name">'+it.n+'</div>'+
+        '<div class="spec"><span>'+specTxt+'</span>'+
+          (dueTxt?' · <span>'+dueTxt+'</span>':'')+'</div>'+
+        '<div class="rowmsg" id="msg'+i+'">要是 '+it.moq+' 的倍數</div></td>'+
+      '<td class="num"><div class="qtybox">'+
+        '<button type="button" class="stp" onclick="step('+i+',-1)" aria-label="減一箱">−</button>'+
+        '<input type="number" min="0" step="'+(it.moq||1)+'" inputmode="numeric" '+
+          /* value 要吃 qty[i]：今天已下過的單由 prefill 帶進來，重畫時要把數字留在格子裡。
+             ⛔ 不可寫死 value=""，那會讓預填只存在於變數裡、畫面永遠是 0。 */
+          'id="q'+i+'" value="'+(qty[i]>0?qty[i]:"")+'" placeholder="0" oninput="chg('+i+')">'+
+        '<span class="unit">'+(it.u||"")+'</span>'+
+        '<button type="button" class="stp" onclick="step('+i+',1)" aria-label="加一箱">+</button>'+
+      '</div></td>'+
+      /* 小計同理：原本只有 chg() 會填，預填進來的列不經過 chg()，會停在「—」。 */
+      '<td class="num" id="sub'+i+'">'+(qty[i]>0?"$"+fmt(amountOf(i,qty[i])):"—")+'</td>';
+    tb.appendChild(tr);
+  });
+  refreshArrive();
+  recalc();
+}
+/* 加減一次跳一個 MOQ 倍數。
+   🔴 手打過非倍數（例如 MOQ 8 打成 5）時，先對齊到倍數再加減，
+      ⛔ 不可在錯的基準上疊加 —— 那會得到 13、21 這種永遠過不了檢查的數字。 */
+function step(i,dir){
+  const m = ITEMS[i].moq || 1;
+  const el = document.getElementById("q"+i);
+  let v = parseInt(el.value||"0",10)||0;
+  v = dir>0 ? (Math.floor(v/m)+1)*m : (Math.ceil(v/m)-1)*m;
+  if(v<0) v=0;
+  el.value = v>0 ? v : "";
+  chg(i);
+}
+function chg(i){
+  const el=document.getElementById("q"+i);
+  const v=parseInt(el.value||"0",10)||0;
+  qty[i]=v;
+  const bad = v>0 && ITEMS[i].moq && v % ITEMS[i].moq !== 0;
+  el.classList.toggle("moqbad",bad);
+  document.getElementById("msg"+i).classList.toggle("show",bad);
+  document.getElementById("sub"+i).textContent = v>0 ? "$"+fmt(amountOf(i,v)) : "—";
+  recalc();
+}
+function recalc(){
+  let t=0,ok=false,bad=false;
+  ITEMS.forEach((it,i)=>{ if(qty[i]>0){ ok=true; t+=amountOf(i,qty[i]);
+                                        if(it.moq && qty[i]%it.moq!==0) bad=true; } });
+  document.getElementById("total").textContent=fmt(t);
+  document.getElementById("total2").textContent=fmt(t);
+  document.getElementById("submitBtn").disabled = !ok || bad;
+}
+
+function show(id){
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("on"));
+  document.getElementById(id).classList.add("on");
+  window.scrollTo(0,0);
+}
+/* ───────── 送出 ─────────────────────────────────────────────────────────
+   LIVE：POST /xq/order → 寫**正式**叫貨明細（2026-09-19 接正式，副本已刪）。
+         ⚠️ 送出去就是真的一列，會進應收明細。失敗一律把後端原話印出來，
+         ⛔ 不可回到「已送出」畫面 —— 那會讓店長以為單下了。
+   雛形：維持原本行為（只切畫面），並在按鈕旁講明它不會進任何系統。 */
+document.getElementById("submitBtn").onclick=function(){
+  if(!LIVE){ show("scrDone"); return; }
+  const payload = {};
+  ITEMS.forEach((it,i)=>{ if(qty[i]>0) payload[it.code]=qty[i]; });
+  const btn=document.getElementById("submitBtn");
+  btn.disabled=true; btn.textContent="送出中…";
+  fetch(ENDPOINT+"/order",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({u:Q_UID,s:Q_SIG,store:Q_STORE,qty:payload})})
+    .then(r=>r.json().catch(()=>({ok:false,error:"http-"+r.status})))
+    .then(j=>{
+      btn.disabled=false; btn.textContent="填寫完畢，送出";
+      /* 🔴 **叫貨頁刻意不自動跳回 1:1 對話**（軒徹 2026-09-20 msg25477「維持現狀」）。
+         進貨（receiving.html）與調撥（transfer.html）送出後會在 `BACK_DELAY_MS`＝5 秒後跳回去，
+         這一頁**不要照抄**：`scrDone` 上還有「看這張單」可以點，自動跳走等於把他從
+         一個有動作的畫面上拉開，而且他只剩 5 秒可以按。
+         ⛔ 不要為了「三頁行為一致」把 setTimeout 加回來 —— 這是他當場選的 A，不是漏做。 */
+      if(j&&j.ok){ show("scrDone"); return; }
+      alertBar("送不出去："+((j&&j.error)||"未知原因"));
+    })
+    .catch(()=>{ btn.disabled=false; btn.textContent="填寫完畢，送出";
+                 alertBar("連不到後端，單沒有送出去。"); });
+};
+function alertBar(msg){
+  const b=document.getElementById("demoBar");
+  b.style.display="block"; b.innerHTML="<b>"+msg+"</b>";
+  window.scrollTo(0,0);
+}
+document.getElementById("gearBtn").onclick=()=>show("scrAdmin");
+
+function setRole(r){
+  document.getElementById("gearBtn").style.display = (r==="admin") ? "block" : "none";
+  document.getElementById("hdrSub").textContent =
+    r==="admin" ? "管理者檢視" : (r==="new" ? "尚未開通" : "台北江南店");
+  show(r==="new" ? "scrApply" : "scrOrder");
+}
+document.getElementById("roleSel").onchange = e => setRole(e.target.value);
+
+document.getElementById("dOrder").textContent = today();
+/* dArrive 由 refreshArrive() 在 render() 裡算（每列同一條規則），這裡不再各算一次 */
+const no = "2001" + new Date().toISOString().slice(2,10).replace(/-/g,"");
+document.getElementById("dNo").textContent = no;
+document.getElementById("dNo2").textContent = no;
+render(); setRole("store");
+
+/* ───────── 開機：帶了身分就去拿該店真品項 ───────── */
+(function boot(){
+  const bar=document.getElementById("demoBar");
+  if(!LIVE){
+    bar.innerHTML='<b>雛形展示</b>·這個連結沒帶身分，下面是<b>假品項</b>、送出不會進任何系統';
+    return;
+  }
+  document.getElementById("roleSel").style.display="none";
+  bar.innerHTML='<b>載入該店品項中…</b>';
+  fetch(ENDPOINT+"/items?store="+encodeURIComponent(Q_STORE)
+        +"&u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG))
+    .then(r=>r.json().catch(()=>({ok:false,error:"http-"+r.status})))
+    .then(j=>{
+      if(!j||!j.ok){ alertBar("拿不到品項："+((j&&j.error)||"未知原因")
+                              +"（下面是假品項，不要用）"); return; }
+      ITEMS = j.items.map(it=>({code:it.code, n:it.name, s:it.spec, moq:it.moq,
+                                u:it.unit, box:it.box_price, due:it.due}));
+      EMPTY_REASON = j.empty_reason || "";
+      /* 今天已經下過的單 → 把數量預填回去（軒徹 2026-09-17 msg24872）。
+         後端回的 prefill 是 {貨號: 數量}；⛔ 用貨號對，不要用順序對 ——
+         品項順序會跟著 ERP 改，拿順序對會把數量填到別的品項那一列而且完全無聲。 */
+      const pre = (j && j.prefill) || {};
+      qty = ITEMS.map(it => Number(pre[it.code]) || 0);
+      document.getElementById("hdrSub").textContent = j.store_name;
+      /* 送出成功那張卡的店名原本是寫死的「台北江南店」⇒ 開第二家店就會顯示錯的店名。
+         跟標題列用同一個來源，⛔ 不要再留一份寫死的。 */
+      document.getElementById("doneStore").textContent = j.store_name;
+      /* 這行是雛形留下的：真品項載進來之後它就變成一句假話，要收掉。 */
+      document.getElementById("demoNote").style.display="none";
+      document.getElementById("dNo").textContent = Q_STORE + todayNo();
+      document.getElementById("dNo2").textContent = Q_STORE + todayNo();
+      /* 2026-09-19 軒徹 msg25289/25292：副本刪除，LIFF 直接作用在正式檔
+         ⇒ 沙盒橫幅整條拿掉（留著就是一句假話）。橫幅本身保留給 alertBar 報錯用。 */
+      bar.style.display="none";
+      render();
+    })
+    .catch(()=>alertBar("連不到後端（下面是假品項，不要用）"));
+})();
+/* 單號格式跟既有的一樣：店號 + 西元年後兩碼 + MM + DD（實例 2001260916）。
+   ⛔ 不要用民國年 —— 那會產出 20011150916，跟系統裡任何一張單都對不起來。 */
+function todayNo(){ const d=new Date();
+  return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,"0")
+        +String(d.getDate()).padStart(2,"0"); }
+
+/* ───────── 「看這張單」（軒徹 2026-09-19 msg25316 選 1：單純給下單的人看）─────────
+   🔴 每次點開都**現讀** `/xq/view`，⛔ 不可以拿送出當下的回傳值來畫：
+      這顆鈕存在的唯一理由就是「改過單之後看到的是改完的版本」，
+      用快照畫的話它跟原本那顆假的 PDF 鈕一樣沒用，只是比較不明顯。
+   🔴 失敗一律把後端原話印出來，⛔ 不准畫一張空單——空白畫面跟「這張單沒東西」長得一樣。 */
+function openView(){
+  if(!LIVE){ alert("雛形展示：正式版這裡會顯示你剛送出的那張單。"); return; }
+  const no = document.getElementById("dNo2").textContent.trim();
+  document.getElementById("vBody").textContent = "讀取中…";
+  document.getElementById("vNo").textContent = no;
+  show("scrView");
+  fetch(ENDPOINT+"/view?no="+encodeURIComponent(no)
+        +"&store="+encodeURIComponent(Q_STORE)
+        +"&u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG))
+    .then(r=>r.json())
+    .then(j=>{
+      if(!j||!j.ok){ document.getElementById("vBody").textContent =
+        "看不到這張單：" + ((j&&j.error)||"未知原因"); return; }
+      document.getElementById("vStore").textContent = j.store_name || "";
+      document.getElementById("vNo").textContent    = j.order_no || no;
+      document.getElementById("vDate").textContent  = j.date || "—";
+      document.getElementById("vTotal").textContent = fmt(j.total||0);
+      if(!j.items || !j.items.length){
+        document.getElementById("vBody").textContent = j.empty_reason || "這張單沒有品項。";
+        return;
+      }
+      /* 用頁面既有的 .name／.spec／td.num，⛔ 不要為了這張表另外發明一套 class */
+      const rows = j.items.map(it =>
+        '<tr><td><div class="name">'+esc(it.name)+'</div>'
+        +'<div class="spec">'+esc(it.spec||"")+'</div></td>'
+        +'<td class="num">'+esc(it.qty)+' '+esc(it.unit||"")+'</td>'
+        +'<td class="num">$'+fmt(it.amount||0)+'</td></tr>').join("");
+      document.getElementById("vBody").innerHTML =
+        '<table><tbody>'+rows+'</tbody></table>';
+    })
+    .catch(()=>{ document.getElementById("vBody").textContent =
+      "連不到後端，這張單沒讀到（不是沒有東西，是讀不到）。"; });
+}
+/* 🔴 品名／規格是從表上讀回來的字，⛔ 一律跳脫再塞進 innerHTML：
+      ERP 的品名欄是人打的，哪天有人打了一個 `<` 就會把整張表排版弄壞。 */
+function esc(s){ return String(s==null?"":s)
+  .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+  .replace(/"/g,"&quot;"); }
+
+/* ───────── LIFF：有就用，沒有就當一般網頁跑（雛形要能直接點開看） ─────────
+   正式版才會綁真的 LIFF ID，並用 liff.getProfile() 的 userId 決定這個人是哪一間店。 */
+(async ()=>{
+  const LIFF_ID = "";                       // 雛形留空：不進 LIFF 流程
+  if(!LIFF_ID || typeof liff === "undefined") return;
+  try{
+    await liff.init({liffId:LIFF_ID});
+    if(!liff.isLoggedIn()){ liff.login(); return; }
+    const p = await liff.getProfile();
+    console.log("LIFF userId:", p.userId);   // 正式版：拿這個對應到店
+    document.getElementById("demoBar").style.display="none";
+  }catch(e){ console.warn("LIFF init 失敗，改用一般網頁模式:", e); }
+})();
+</script>
+<script>
+/* 底部固定列的高度會跟著手機字級放大；寫死的 body padding-bottom 在安卓大字級下會把最後幾列蓋住、滑不到
+   （軒徹 2026-09-29 msg27566 店家影片）。改成量它實際多高再留空間。 */
+(function(){var f=document.querySelector('.foot');if(!f)return;
+  function fit(){document.body.style.paddingBottom=(f.offsetHeight+16)+'px';}
+  fit();window.addEventListener('resize',fit);
+  if(window.ResizeObserver)new ResizeObserver(fit).observe(f);})();
+</script>
+<script>
+/* ───────── 貨款未付通知（測試版·軒徹 2026-10-29 msg34650）─────────
+   🔴 只有 index-test.html 有這段；正式 index.html 不動。
+   後端 `/xq/unpaid` 回該店「上個月以前未收 > 0」的月份與封鎖日期（xq_liff_unpaid.py）。
+   ⛔ 拿不到資料就不跳（通知不是閘門，不擋叫貨）；block_date 沒設定就不印日期那句，不自己編日期。 */
+function mdLabel(iso){ const p=String(iso).split("-"); return Number(p[1])+" 月 "+Number(p[2])+" 日"; }
+function showUnpaid(d){
+  if(!d || !d.ok || !d.items || !d.items.length) return;
+  let rows = d.items.map(x=>'<tr><td>'+Number(x.month.slice(5))+' 月貨款</td><td>$'+fmt(x.amount)+'</td></tr>').join("");
+  const warn = d.block_date
+    ? '請儘速付款。若於 <u>'+mdLabel(d.block_date)+'</u> 前仍未付清，將暫停本店叫貨功能。'
+    : '請儘速付款，逾期未付將暫停本店叫貨功能。';
+  const m=document.createElement("div"); m.className="unpaid-mask";
+  m.innerHTML='<div class="unpaid-box"><div class="hd">⚠️ 貨款未付通知</div><div class="bd">'
+    +esc(d.store||"")+' 目前有以下貨款尚未付清：<table>'+rows+'</table>'
+    +'<div class="sum"><span>合計未付</span><span>$'+fmt(d.total)+'</span></div><div class="warn">'+warn+'</div></div>'
+    +'<button type="button">我知道了</button></div>';
+  m.querySelector("button").onclick=()=>m.remove();
+  document.body.appendChild(m);
+}
+(function(){
+  if(window.UNPAID_PREVIEW){ showUnpaid(window.UNPAID_PREVIEW); return; }   // 本機預覽截圖用
+  if(!LIVE) return;
+  fetch(ENDPOINT+"/unpaid?store="+encodeURIComponent(Q_STORE)
+        +"&u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG))
+    .then(r=>r.json()).then(showUnpaid)
+    .catch(e=>console.warn("未付通知拿不到資料，不顯示:", e));
+})();
+</script>
+</body>
+</html>
