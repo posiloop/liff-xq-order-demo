@@ -217,6 +217,19 @@ function ymd(s){
   var dt = new Date(+p[0], +p[1]-1, +p[2]);
   return {m:(+p[1])+"月", d:String(+p[2]), w:WD[dt.getDay()]};
 }
+/* 🔴 方案C（軒徹 2026-10-29 msg34706）：調撥的錢照「收貨那家店自己的價」記（特價店照特價），
+   中轉倉自 9 月起不記帳。⇒ 調出頁的預估要用**會被記帳那一方**的價（軒徹 msg34753：
+   中轉倉調給中科土雞肉丁寫 9,000、實際中科記 8,400）。
+   ・調給中轉倉（退回）⇒ 記在本店，用本店價
+   ・其他 ⇒ 記在調入方，用 `box_in[調入方]`（後端只放跟本店不同價的那幾家），沒有就是同價
+   只給人看；寫表的金額一律後端重算。 */
+function boxFor(it){
+  if(!it) return null;
+  var b = (TO_SEL && TO_SEL !== "0000" && it.box_in) ? it.box_in[TO_SEL] : null;
+  if(b && b[0] && b[1]) return {box:b[0], moq:b[1]};
+  return (it.box_price && it.moq) ? {box:it.box_price, moq:it.moq} : null;
+}
+function estFor(it, qty){ var b = boxFor(it); return b ? (Number(qty)/b.moq) * b.box : null; }
 function money(n){
   if(n === null || n === undefined || n === "") return "";
   return "$" + Number(n).toLocaleString("en-US", {maximumFractionDigits:0});
@@ -283,7 +296,7 @@ function renderOut(){
 
   var h = '<div class="card"><h3>調去哪一間店</h3><div class="pad">'
         + '<label class="fld" for="to">調入方</label>'
-        + '<select class="full" id="to" onchange="tally()"><option value="">請選擇…</option>';
+        + '<select class="full" id="to" onchange="syncOut();renderOut()"><option value="">請選擇…</option>';
   (DATA.targets || []).forEach(function(t){
     h += '<option value="'+esc(t.no)+'"'+(TO_SEL === t.no ? " selected" : "")+'>'
       +  esc(t.no + " " + t.name)+'</option>';
@@ -315,9 +328,9 @@ function renderOut(){
        看起來像是在規定這一格要填的單位或倍數 —— 而調撥**本來就不必照 MOQ**
        （他逐字「數量不用照moq」）。⇒ 只留預估金額。
        ⛔ 沒有東西可印就整個 div 不要輸出，不要留一條空白的線。 */
-    if(it && ln.qty !== "" && it.box_price && it.moq){
+    if(ln.qty !== "" && estFor(it, ln.qty) !== null){
       h += '<div class="amt">預估 '
-        +  money((Number(ln.qty)/it.moq) * it.box_price)
+        +  money(estFor(it, ln.qty))
         +  '</div>';
     }
   });
@@ -465,7 +478,8 @@ function tally(){
       if(!ln.code || ln.qty === "" || Number(ln.qty) <= 0) return;
       n++;
       var it = byCode(ln.code);
-      if(it && it.box_price && it.moq){ est += (Number(ln.qty)/it.moq) * it.box_price; }
+      var e1 = estFor(it, ln.qty);
+      if(e1 !== null){ est += e1; }
       else { unknown++; }
     });
     s.innerHTML = "已填 <b>"+n+"</b> 項"
@@ -498,7 +512,7 @@ function collectOut(){
     var it = byCode(ln.code) || {};
     out.push({code:ln.code, name:it.name || ln.code, spec:it.spec || "",
               unit:it.unit || "", qty:ln.qty,
-              est:(it.box_price && it.moq) ? (Number(ln.qty)/it.moq)*it.box_price : null});
+              est:estFor(it, ln.qty)});
   });
   return out;
 }
@@ -545,8 +559,13 @@ function reviewOut(entries){
       +  (e.est === null ? '<em>金額待確認</em>' : '<em>'+esc(money(e.est))+'</em>')
       +  '</span></div>';
   });
+  /* 金額記在誰身上要講出來：中轉倉調出時中轉倉不記帳，畫面上的金額是**對方**的帳。 */
+  var who = (TO_SEL === "0000") ? (DATA.store_no+" "+DATA.store_name) : toName;
   h += '</div><div class="hint">送出後會開一張調撥單給對方。'
-    +  '<b>對方完成調入之前，兩邊的帳都不會動。</b></div>';
+    +  '<b>對方完成調入之前，兩邊的帳都不會動。</b>'
+    +  '<br>上面的金額記在 '+esc(who)+'。'
+    +  (DATA.store_no === "0000" ? '中轉倉不記帳。' : '')
+    +  '</div>';
   document.getElementById("pane").innerHTML = h;
   window.scrollTo(0, 0);
 }
