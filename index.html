@@ -99,6 +99,22 @@
   /* 軒徹 msg26509：「截圖紀錄」四個字要大、顏色要明顯 */
   .note-shot{color:var(--bad);font-size:20px;font-weight:800;letter-spacing:1px;margin-top:6px}
   .done-box{background:var(--brand-soft);border:1.5px solid var(--brand);border-radius:12px;padding:16px}
+  /* ───── 貨款未付通知（軒徹 2026-10-29 msg34650·10-30 msg34741 上線）───── */
+  .unpaid-mask{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.55);
+               display:flex;align-items:center;justify-content:center;padding:20px}
+  .unpaid-box{background:#fff;border-radius:16px;width:100%;max-width:360px;overflow:hidden;
+              box-shadow:0 12px 40px rgba(0,0,0,.3)}
+  .unpaid-box .hd{background:var(--bad);color:#fff;padding:16px 18px;font-size:19px;font-weight:700}
+  .unpaid-box .bd{padding:16px 18px;font-size:15px}
+  .unpaid-box table{border:0;margin:10px 0 12px;table-layout:auto;width:100%;border-radius:0}
+  .unpaid-box td:last-child{text-align:right;white-space:nowrap}
+  .unpaid-box td{padding:7px 4px;font-size:15px;width:auto}
+  .unpaid-box .sum{display:flex;justify-content:space-between;font-weight:700;font-size:17px;
+                    border-top:2px solid var(--ink);padding:8px 4px 0;margin:-6px 0 14px}
+  .unpaid-box .warn{background:#fdecea;color:var(--bad);border-radius:10px;padding:10px 12px;
+                    font-weight:700;line-height:1.6}
+  .unpaid-box button{display:block;width:calc(100% - 36px);margin:0 18px 18px;padding:13px;border:0;
+                     border-radius:12px;background:var(--ink);color:#fff;font-size:16px;font-weight:700}
 </style>
 </head>
 <body>
@@ -554,6 +570,35 @@ function esc(s){ return String(s==null?"":s)
   function fit(){document.body.style.paddingBottom=(f.offsetHeight+16)+'px';}
   fit();window.addEventListener('resize',fit);
   if(window.ResizeObserver)new ResizeObserver(fit).observe(f);})();
+</script>
+<script>
+/* ───────── 貨款未付通知（軒徹 2026-10-29 msg34650·10-30 msg34741 上線）─────────
+   🔴 上線日（11/5）由後端 xq-unpaid-notice.json 的 start_date 控制：之前後端回空，這裡就不跳。
+   後端 `/xq/unpaid` 回該店「上個月以前未收 > 0」的月份與封鎖日期（xq_liff_unpaid.py）。
+   ⛔ 拿不到資料就不跳（通知不是閘門，不擋叫貨）；block_date 沒設定就不印日期那句，不自己編日期。 */
+function mdLabel(iso){ const p=String(iso).split("-"); return Number(p[1])+" 月 "+Number(p[2])+" 日"; }
+function showUnpaid(d){
+  if(!d || !d.ok || !d.items || !d.items.length) return;
+  let rows = d.items.map(x=>'<tr><td>'+Number(x.month.slice(5))+' 月貨款</td><td>$'+fmt(x.amount)+'</td></tr>').join("");
+  const warn = d.block_date
+    ? '請儘速付款。若於 <u>'+mdLabel(d.block_date)+'</u> 前仍未付清，將暫停本店叫貨功能。'
+    : '請儘速付款，逾期未付將暫停本店叫貨功能。';
+  const m=document.createElement("div"); m.className="unpaid-mask";
+  m.innerHTML='<div class="unpaid-box"><div class="hd">⚠️ 貨款未付通知</div><div class="bd">'
+    +esc(d.store||"")+' 目前有以下貨款尚未付清：<table>'+rows+'</table>'
+    +'<div class="sum"><span>合計未付</span><span>$'+fmt(d.total)+'</span></div><div class="warn">'+warn+'</div></div>'
+    +'<button type="button">我知道了</button></div>';
+  m.querySelector("button").onclick=()=>m.remove();
+  document.body.appendChild(m);
+}
+(function(){
+  if(window.UNPAID_PREVIEW){ showUnpaid(window.UNPAID_PREVIEW); return; }   // 本機預覽截圖用
+  if(!LIVE) return;
+  fetch(ENDPOINT+"/unpaid?store="+encodeURIComponent(Q_STORE)
+        +"&u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG))
+    .then(r=>r.json()).then(showUnpaid)
+    .catch(e=>console.warn("未付通知拿不到資料，不顯示:", e));
+})();
 </script>
 </body>
 </html>
