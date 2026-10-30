@@ -49,6 +49,9 @@
   /* 每一小段自己不斷行，⛔ 不要讓「$2,080/箱」被拆成「$2,080/」＋「箱」——
      拆開之後那個「箱」會貼在下一行開頭，看起來像另一個欄位。 */
   .spec span{white-space:nowrap}
+  /* 看這張單：預估到貨日欄（軒徹 2026-10-30 msg34912），版型照 receiving.html 那欄 */
+  th.eta,td.eta{width:46px;text-align:center;white-space:nowrap;font-size:12.5px;color:var(--muted);line-height:1.25}
+  th.eta{line-height:1.2;font-size:11.5px}
   input[type=number]{width:100%;max-width:48px;padding:8px 4px;border:1.5px solid var(--line);border-radius:8px;
                      font-size:16px;text-align:center;background:#fff}
   /* 數量欄＝〔−〕〔輸入〕〔＋〕。加減一次跳一個 MOQ 倍數（MOQ 欄已拿掉，倍數規則改用按鈕表達）。
@@ -196,7 +199,7 @@
     <div class="done-box">
       <div style="font-weight:700;margin-bottom:6px"><span id="vStore">—</span> 叫貨單</div>
       <div class="meta" style="margin-bottom:10px">
-        <span>單號 <b id="vNo">—</b></span><span id="vDateWrap">日期 <b id="vDate">—</b></span>
+        <span>單號 <b id="vNo">—</b></span><span id="vDateWrap">叫貨日期 <b id="vDate">—</b></span>
       </div>
       <div id="vBody">讀取中…</div>
       <div class="meta" style="margin-top:10px;justify-content:flex-end">
@@ -204,7 +207,7 @@
       </div>
       <!-- 🔴 講清楚這頁是「現在的樣子」，否則他改完單再打開會以為系統沒更新。
            文案由軒徹 2026-09-23 msg26509 指定，⛔ 不要自行潤飾。 -->
-      <div class="note" style="margin-top:8px">請確認內容！當日結單前，再叫貨會取代前次叫貨。</div>
+      <div class="note" style="margin-top:8px">請確認內容！<br>當日結單前(晚上八點)，再叫貨會取代前次叫貨。</div>
       <div class="note-shot">截圖紀錄！</div>
     </div>
     <button class="ghost" onclick="show('scrDone')">← 回上一頁</button>
@@ -532,13 +535,17 @@ function openView(){
         return;
       }
       /* 用頁面既有的 .name／.spec／td.num，⛔ 不要為了這張表另外發明一套 class */
+      /* 🔴 到貨日由後端 `eta`（ERP 叫貨週期，同進貨頁）帶，⛔ 前端不自己算；沒有就印「—」 */
+      const md = s => { const p=String(s||"").split("-"); return p.length===3 ? (+p[1])+"/"+(+p[2]) : "—"; };
       const rows = j.items.map(it =>
-        '<tr><td><div class="name">'+esc(it.name)+'</div>'
+        '<tr><td class="eta">'+esc(md(it.eta))+'</td>'
+        +'<td><div class="name">'+esc(it.name)+'</div>'
         +'<div class="spec">'+esc(it.spec||"")+'</div></td>'
         +'<td class="num">'+esc(it.qty)+' '+esc(it.unit||"")+'</td>'
         +'<td class="num">$'+fmt(it.amount||0)+'</td></tr>').join("");
       document.getElementById("vBody").innerHTML =
-        '<table><tbody>'+rows+'</tbody></table>';
+        '<table><thead><tr><th class="eta">預估<br>到貨日</th><th>品項</th>'
+        +'<th class="num">數量</th><th class="num">金額</th></tr></thead><tbody>'+rows+'</tbody></table>';
     })
     .catch(()=>{ document.getElementById("vBody").textContent =
       "連不到後端，這張單沒讀到（不是沒有東西，是讀不到）。"; });
