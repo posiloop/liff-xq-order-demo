@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>享奇雞 品質異常</title>
+<style>
+  :root{
+    --bg:#f5f5f3; --card:#fff; --line:#e0ddd8; --ink:#1c1c1c; --muted:#6b6b6b;
+    --brand:#0f7b3f; --brand-soft:#eef7f1; --ok:#0f7b3f; --bad:#b42318; --warn:#b06a00;
+    --qa:#9C3A1E;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  button,input,select,textarea{touch-action:manipulation}
+  html,body{max-width:100%;overflow-x:hidden}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",system-ui,sans-serif;
+       font-size:16px;line-height:1.55;padding-bottom:110px}
+  header{position:sticky;top:0;z-index:20;background:var(--qa);color:#fff;
+         padding:calc(env(safe-area-inset-top) + 12px) 14px 12px}
+  header .t{font-weight:700;font-size:17px}
+  header .t small{display:block;font-weight:400;opacity:.92;font-size:12.5px}
+  main{padding:12px}
+  .fld{background:var(--card);border:1px solid var(--line);border-radius:12px;
+       padding:12px;margin-bottom:10px}
+  .fld label{display:block;font-weight:700;font-size:14.5px;margin-bottom:6px}
+  .fld label .req{color:var(--bad);font-weight:400;font-size:12.5px;margin-left:4px}
+  .fld .hint{color:var(--muted);font-size:12.5px;margin-top:6px}
+  /* 🔴 font-size >=16px：iOS Safari 對小於 16px 的輸入框會自動放大整頁。 */
+  select,input[type=number],textarea{width:100%;font-size:16px;padding:10px;
+         border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);
+         font-family:inherit}
+  textarea{min-height:90px;resize:vertical}
+  .qty{display:flex;gap:8px;align-items:center}
+  .qty input{flex:1 1 auto}
+  .qty .unit{flex:0 0 auto;min-width:48px;text-align:center;font-weight:700;color:var(--muted)}
+  .code{color:var(--muted);font-size:12.5px;margin-top:4px}
+  .photos{display:flex;flex-wrap:wrap;gap:8px}
+  .ph{position:relative;width:84px;height:84px;border-radius:8px;overflow:hidden;
+      border:1px solid var(--line);background:#eee}
+  .ph img{width:100%;height:100%;object-fit:cover;display:block}
+  .ph button{position:absolute;top:2px;right:2px;border:0;border-radius:999px;width:24px;height:24px;
+             background:rgba(0,0,0,.6);color:#fff;font-size:14px;line-height:24px;padding:0}
+  .addph{width:84px;height:84px;border:1.5px dashed var(--qa);border-radius:8px;background:#fff;
+         color:var(--qa);font-size:13px;font-weight:700;display:flex;align-items:center;
+         justify-content:center;text-align:center;line-height:1.3}
+  .bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
+       padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);display:flex;justify-content:flex-end}
+  .bar button{background:var(--qa);color:#fff;border:0;border-radius:10px;
+              padding:12px 22px;font-size:16px;font-weight:700}
+  .bar button[disabled]{background:#b9b9b9}
+  .msg{padding:13px;border-radius:12px;margin-bottom:12px;font-size:14.5px;line-height:1.7}
+  .msg.bad{background:#fdecea;border:1px solid #f2b5ae;color:var(--bad)}
+  .msg.ok{background:var(--brand-soft);border:1px solid #a9d6bc;color:var(--ok)}
+  /* 說明彈窗：版型照叫貨頁的「貨款未付通知」 */
+  .mask{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.55);
+        display:flex;align-items:center;justify-content:center;padding:20px}
+  .box{background:#fff;border-radius:16px;width:100%;max-width:360px;overflow:hidden;
+       box-shadow:0 12px 40px rgba(0,0,0,.3)}
+  .box .hd{background:var(--qa);color:#fff;padding:16px 18px;font-size:19px;font-weight:700}
+  .box .bd{padding:16px 18px;font-size:15px;white-space:pre-wrap;line-height:1.7}
+  .box button{display:block;width:calc(100% - 36px);margin:0 18px 18px;border:0;border-radius:10px;
+              background:var(--qa);color:#fff;font-size:16px;font-weight:700;padding:12px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="t">⚠️ 品質異常回報
+    <small id="sub">載入中…</small>
+  </div>
+</header>
+
+<main>
+  <div id="msg"></div>
+  <form id="form" style="display:none" onsubmit="return false">
+    <div class="fld">
+      <label for="item">異常品項<span class="req">必填</span></label>
+      <select id="item"><option value="">請選擇</option></select>
+      <div class="code" id="code"></div>
+    </div>
+    <div class="fld">
+      <label for="qty">數量<span class="req">必填</span></label>
+      <div class="qty"><input id="qty" type="number" inputmode="decimal" min="0" step="any">
+        <span class="unit" id="unit">—</span></div>
+    </div>
+    <div class="fld">
+      <label for="found">發現時間<span class="req">必填</span></label>
+      <select id="found"><option value="">請選擇</option></select>
+    </div>
+    <div class="fld">
+      <label>照片<span class="req">必填，至少 1 張</span></label>
+      <div class="photos" id="photos"></div>
+      <input id="file" type="file" accept="image/*" multiple style="display:none">
+      <div class="hint" id="phint"></div>
+    </div>
+    <div class="fld">
+      <label for="desc">異常說明</label>
+      <textarea id="desc"></textarea>
+    </div>
+  </form>
+</main>
+
+<div class="bar" id="bar" style="display:none">
+  <button id="send" onclick="send()">送出回報</button>
+</div>
+
+<script>
+/* ───────── 品質異常頁（軒徹 2026-11-05 規格）────────────────────────────────
+   說明彈窗（內容由後端 `xq_liff_qa.QA_NOTICE_TEXT` 給）→「我知道了」→ 表單。
+   🔴 品項只列本店叫貨權限內的（後端讀 ERP）；單位跟著品項走（ERP「單位」欄＝最小單位）。
+   🔴 這頁**不顯示供應商**（叫貨表硬規則：不透漏供應商）——供應商由後端帶進內部通知卡。
+   🔴 照片在手機上先縮成長邊 1280 的 JPEG 再送，最多 5 張。 */
+var ENDPOINT = "https://hook.aemassinc.net/xq";
+function qs(k){
+  var m = new RegExp("[?&]"+k+"=([^&]*)").exec(window.location.search);
+  return m ? decodeURIComponent(m[1].replace(/\+/g," ")) : "";
+}
+var Q = {u:qs("u"), s:qs("s"), store:qs("store"), c:qs("c"), cs:qs("cs")};
+var DATA = null, PHOTOS = [], MAXP = 5, SENDING = false;
+
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
+  });
+}
+function say(cls, html){
+  document.getElementById("msg").innerHTML = cls ? '<div class="msg '+cls+'">'+html+'</div>' : "";
+}
+
+function notice(text, done){
+  var m = document.createElement("div"); m.className = "mask";
+  m.innerHTML = '<div class="box"><div class="hd">回報前請先閱讀</div><div class="bd">'
+    + esc(text) + '</div><button type="button">我知道了</button></div>';
+  m.querySelector("button").onclick = function(){ m.remove(); done(); };
+  document.body.appendChild(m);
+}
+
+function fill(d){
+  DATA = d; MAXP = d.max_photos || 5;
+  document.getElementById("sub").textContent = d.store_name + "・回報人 " + (d.reporter || "");
+  var sel = document.getElementById("item");
+  d.items.forEach(function(it, i){
+    var o = document.createElement("option");
+    o.value = String(i);
+    o.textContent = it.name + (it.spec ? "（"+it.spec+"）" : "");
+    sel.appendChild(o);
+  });
+  sel.onchange = function(){
+    var it = DATA.items[Number(sel.value)];
+    document.getElementById("unit").textContent = it ? (it.unit || "—") : "—";
+    document.getElementById("code").textContent = it ? ("貨號 " + it.code) : "";
+  };
+  var f = document.getElementById("found");
+  d.found_at.forEach(function(x){
+    var o = document.createElement("option"); o.value = x; o.textContent = x; f.appendChild(o);
+  });
+  document.getElementById("phint").textContent = d.photo_hint + "（最多 " + MAXP + " 張）";
+  document.getElementById("desc").placeholder = d.desc_placeholder || "";
+  document.getElementById("file").onchange = function(e){
+    var fs = Array.prototype.slice.call(e.target.files || []);
+    fs.forEach(function(file){ if(PHOTOS.length < MAXP) PHOTOS.push(file); });
+    if(fs.length && PHOTOS.length >= MAXP) say("bad", "照片最多 " + MAXP + " 張，多的沒有加進來。");
+    e.target.value = "";
+    drawPhotos();
+  };
+  drawPhotos();
+  if(!d.items.length) say("bad", "本店目前沒有可回報的品項，請聯繫管理員。");
+  notice(d.notice || "", function(){
+    document.getElementById("form").style.display = "";
+    document.getElementById("bar").style.display = "";
+  });
+}
+
+function drawPhotos(){
+  var box = document.getElementById("photos"); box.innerHTML = "";
+  PHOTOS.forEach(function(file, i){
+    var d = document.createElement("div"); d.className = "ph";
+    var img = document.createElement("img"); img.src = URL.createObjectURL(file);
+    var b = document.createElement("button"); b.type = "button"; b.textContent = "×";
+    b.onclick = function(){ PHOTOS.splice(i, 1); drawPhotos(); };
+    d.appendChild(img); d.appendChild(b); box.appendChild(d);
+  });
+  if(PHOTOS.length < MAXP){
+    var a = document.createElement("button"); a.type = "button"; a.className = "addph";
+    a.innerHTML = "＋<br>加照片";
+    a.onclick = function(){ document.getElementById("file").click(); };
+    box.appendChild(a);
+  }
+}
+
+function shrink(file){
+  return new Promise(function(ok, bad){
+    var url = URL.createObjectURL(file), img = new Image();
+    img.onload = function(){
+      var W = img.naturalWidth, H = img.naturalHeight, k = Math.min(1, 1280 / Math.max(W, H));
+      var c = document.createElement("canvas");
+      c.width = Math.round(W * k); c.height = Math.round(H * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      ok(c.toDataURL("image/jpeg", 0.82));
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); bad(new Error("照片讀不到")); };
+    img.src = url;
+  });
+}
+
+function send(){
+  if(SENDING) return;
+  var it = DATA.items[Number(document.getElementById("item").value)];
+  var qty = document.getElementById("qty").value;
+  var found = document.getElementById("found").value;
+  var desc = document.getElementById("desc").value.trim();
+  if(!it){ return say("bad", "請選異常品項。"); }
+  if(!(Number(qty) > 0)){ return say("bad", "請填數量（要大於 0）。"); }
+  if(!found){ return say("bad", "請選發現時間。"); }
+  if(!PHOTOS.length){ return say("bad", "請至少附 1 張照片。"); }
+  SENDING = true;
+  var btn = document.getElementById("send"); btn.disabled = true; btn.textContent = "送出中…";
+  say("", "");
+  Promise.all(PHOTOS.map(shrink)).then(function(photos){
+    return fetch(ENDPOINT + "/qa", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({u:Q.u, s:Q.s, c:Q.c, cs:Q.cs, store:Q.store, code:it.code,
+                            qty:Number(qty), found_at:found, desc:desc, photos:photos})});
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if(!d.ok) throw new Error(d.error || "送出失敗");
+    document.getElementById("form").style.display = "none";
+    document.getElementById("bar").style.display = "none";
+    say("ok", "已送出品質異常回報。<br>編號 <b>" + esc(d.qa_no) + "</b>");
+  }).catch(function(e){
+    SENDING = false; btn.disabled = false; btn.textContent = "送出回報";
+    say("bad", "送出失敗：" + esc(e.message) + "<br>內容都還在，可以直接再按一次送出。");
+  });
+}
+
+(function(){
+  if(!Q.u || !Q.s || !Q.c || !Q.cs){
+    document.getElementById("sub").textContent = "";
+    return say("bad", "請從 LINE 選單的「品質異常」進入。");
+  }
+  fetch(ENDPOINT + "/qa-form?" + ["u","s","store","c","cs"].map(function(k){
+      return k + "=" + encodeURIComponent(Q[k]); }).join("&"))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok){ document.getElementById("sub").textContent = ""; return say("bad", esc(d.error || "讀取失敗")); }
+      fill(d);
+    })
+    .catch(function(e){ document.getElementById("sub").textContent = ""; say("bad", "讀取失敗：" + esc(e.message)); });
+})();
+</script>
+</body>
+</html>
