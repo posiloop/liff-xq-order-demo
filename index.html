@@ -407,7 +407,7 @@ function recalc(){
                                         if(it.moq && qty[i]%it.moq!==0) bad=true; } });
   document.getElementById("total").textContent=fmt(t);
   document.getElementById("total2").textContent=fmt(t);
-  document.getElementById("submitBtn").disabled = !ok || bad;
+  document.getElementById("submitBtn").disabled = !ok || bad || window.UNPAID_BLOCKED;
 }
 
 function show(id){
@@ -586,6 +586,7 @@ function esc(s){ return String(s==null?"":s)
 function mdLabel(iso){ const p=String(iso).split("-"); return Number(p[1])+" 月 "+Number(p[2])+" 日"; }
 function showUnpaid(d){
   if(!d || !d.ok || !d.items || !d.items.length) return;
+  if(d.blocked){ return showBlocked(d); }
   let rows = d.items.map(x=>'<tr><td>'+Number(x.month.slice(5))+' 月貨款</td><td>$'+fmt(x.amount)+'</td></tr>').join("");
   const warn = d.block_date
     ? '請儘速付款。若於 <u>'+mdLabel(d.block_date)+'</u> 前仍未付清，將暫停本店叫貨功能。'
@@ -595,6 +596,21 @@ function showUnpaid(d){
     +esc(d.store||"")+' 目前有以下貨款尚未付清：<table>'+rows+'</table>'
     +'<div class="sum"><span>合計未付</span><span>$'+fmt(d.total)+'</span></div><div class="warn">'+warn+'</div></div>'
     +'<button type="button">我知道了</button></div>';
+  m.querySelector("button").onclick=()=>m.remove();
+  document.body.appendChild(m);
+}
+/* 11/10 起封鎖（軒徹 2026-11-05 msg36445）：後端 blocked=true 才走這裡。送出鈕鎖死；
+   ⛔ 這只是畫面，真的擋在後端 /xq/order（xq_liff_unpaid.order_block）。匯款證明私訊軒徹，不傳群組。 */
+function showBlocked(d){
+  window.UNPAID_BLOCKED=true;
+  const b=document.getElementById("submitBtn"); b.disabled=true; b.textContent="叫貨已暫停（貨款未付）";
+  let rows = d.items.map(x=>'<tr><td>'+Number(x.month.slice(5))+' 月貨款</td><td>$'+fmt(x.amount)+'</td></tr>').join("");
+  const m=document.createElement("div"); m.className="unpaid-mask"; m.style.background="rgba(0,0,0,.75)";
+  m.innerHTML='<div class="unpaid-box"><div class="hd">⛔ 本店叫貨功能已暫停</div><div class="bd">'
+    +esc(d.store||"")+' 以下貨款逾期未付'+(d.block_date?'，自 '+mdLabel(d.block_date)+'起暫停叫貨':'')+'：<table>'+rows+'</table>'
+    +'<div class="sum"><span>合計未付</span><span>$'+fmt(d.total)+'</span></div>'
+    +'<div class="warn" style="background:#f3f4f6;color:var(--ink);font-weight:400">付款後請把匯款證明私訊給軒徹，<br>確認入帳後會自動恢復叫貨。</div></div>'
+    +'<button type="button">關閉</button></div>';
   m.querySelector("button").onclick=()=>m.remove();
   document.body.appendChild(m);
 }
