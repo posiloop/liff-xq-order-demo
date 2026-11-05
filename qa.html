@@ -95,7 +95,7 @@
       <div class="hint" id="phint"></div>
     </div>
     <div class="fld">
-      <label for="desc">異常說明</label>
+      <label for="desc">異常說明<span class="req">必填</span></label>
       <textarea id="desc"></textarea>
     </div>
   </form>
@@ -215,6 +215,7 @@ function send(){
   if(!(Number(qty) > 0)){ return say("bad", "請填數量（要大於 0）。"); }
   if(!found){ return say("bad", "請選發現時間。"); }
   if(!PHOTOS.length){ return say("bad", "請至少附 1 張照片。"); }
+  if(!desc){ return say("bad", "請填異常說明。"); }
   SENDING = true;
   var btn = document.getElementById("send"); btn.disabled = true; btn.textContent = "送出中…";
   say("", "");

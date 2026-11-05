@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>享奇雞 品質異常處理</title>
+<style>
+  :root{
+    --bg:#f5f5f3; --card:#fff; --line:#e0ddd8; --ink:#1c1c1c; --muted:#6b6b6b;
+    --brand:#0f7b3f; --brand-soft:#eef7f1; --ok:#0f7b3f; --bad:#b42318; --qa:#9C3A1E;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  button,select,textarea{touch-action:manipulation}
+  html,body{max-width:100%;overflow-x:hidden}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",system-ui,sans-serif;
+       font-size:16px;line-height:1.55;padding-bottom:110px}
+  header{position:sticky;top:0;z-index:20;background:var(--qa);color:#fff;
+         padding:calc(env(safe-area-inset-top) + 12px) 14px 12px}
+  header .t{font-weight:700;font-size:17px}
+  header .t small{display:block;font-weight:400;opacity:.92;font-size:12.5px}
+  main{padding:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px 12px;margin-bottom:10px}
+  .ln{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14.5px}
+  .ln:last-child{border-bottom:0}
+  .ln .k{flex:0 0 70px;color:var(--muted)}
+  .ln .v{flex:1;min-width:0;white-space:pre-wrap;word-break:break-word}
+  .photos{display:flex;flex-wrap:wrap;gap:8px;padding:10px 0}
+  .photos a img{width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block}
+  .fld{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+  .fld label{display:block;font-weight:700;font-size:14.5px;margin-bottom:6px}
+  .fld label .req{color:var(--bad);font-weight:400;font-size:12.5px;margin-left:4px}
+  /* 🔴 font-size >=16px：iOS Safari 對小於 16px 的輸入框會自動放大整頁。 */
+  select,textarea{width:100%;font-size:16px;padding:10px;border:1.5px solid var(--line);
+                  border-radius:8px;background:#fff;color:var(--ink);font-family:inherit}
+  textarea{min-height:90px;resize:vertical}
+  .bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
+       padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);display:flex;justify-content:flex-end}
+  .bar button{background:var(--qa);color:#fff;border:0;border-radius:10px;padding:12px 22px;font-size:16px;font-weight:700}
+  .bar button[disabled]{background:#b9b9b9}
+  .msg{padding:13px;border-radius:12px;margin-bottom:12px;font-size:14.5px;line-height:1.7}
+  .msg.bad{background:#fdecea;border:1px solid #f2b5ae;color:var(--bad)}
+  .msg.ok{background:var(--brand-soft);border:1px solid #a9d6bc;color:var(--ok)}
+</style>
+</head>
+<body>
+<header><div class="t">🛠 品質異常處理<small id="sub">載入中…</small></div></header>
+<main>
+  <div id="msg"></div>
+  <div id="case"></div>
+  <form id="form" style="display:none" onsubmit="return false">
+    <div class="fld">
+      <label for="act">應對<span class="req">必填</span></label>
+      <select id="act"><option value="">請選擇</option></select>
+    </div>
+    <div class="fld">
+      <label for="note">說明<span class="req">必填</span></label>
+      <textarea id="note"></textarea>
+    </div>
+  </form>
+</main>
+<div class="bar" id="bar" style="display:none"><button id="send" onclick="send()">送出處理</button></div>
+<script>
+/* ───────── 品質異常處理頁（軒徹 2026-11-05 msg36586）────────────────────────
+   連結由機器人私訊給處理人（帶他自己的簽章），⛔ 不是群組卡片上的公開網址。
+   一筆只能處理一次：已處理就只顯示結果，送出鈕不出現；後端也會擋第二次（409）。
+   🔴 折讓／退貨只記錄，不動任何帳。 */
+var ENDPOINT = "https://hook.aemassinc.net/xq";
+function qs(k){
+  var m = new RegExp("[?&]"+k+"=([^&]*)").exec(window.location.search);
+  return m ? decodeURIComponent(m[1].replace(/\+/g," ")) : "";
+}
+var Q = {q:qs("q"), u:qs("u"), s:qs("s"), hs:qs("hs")}, SENDING = false;
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
+  });
+}
+function say(cls, html){
+  document.getElementById("msg").innerHTML = cls ? '<div class="msg '+cls+'">'+html+'</div>' : "";
+}
+function ln(k, v){ return '<div class="ln"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v)+'</div></div>'; }
+function showResult(r){
+  document.getElementById("form").style.display = "none";
+  document.getElementById("bar").style.display = "none";
+  say("ok", "這筆已處理。<br>應對：<b>"+esc(r.action)+"</b><br>說明："+esc(r.note)
+      +"<br>處理："+esc(r.by)+"　"+esc(r.at));
+}
+function fill(d){
+  document.getElementById("sub").textContent = d.qa_no + (d.kind === "測試" ? "（測試）" : "");
+  var ph = (d.photos || []).map(function(u){
+    return '<a href="'+esc(u)+'" target="_blank"><img src="'+esc(u)+'"></a>'; }).join("");
+  document.getElementById("case").innerHTML = '<div class="card">'
+    + ln("店名", d.store) + ln("回報人", d.reporter) + ln("送出時間", d.sent_at)
+    + ln("品項", d.item + (d.spec ? "（"+d.spec+"）" : "")) + ln("數量", d.qty)
+    + ln("發現時間", d.found_at) + ln("異常說明", d.desc) + ln("供應商", d.supplier)
+    + (ph ? '<div class="photos">'+ph+'</div>' : "") + '</div>';
+  if(d.handled){ return showResult(d.result); }
+  var sel = document.getElementById("act");
+  d.actions.forEach(function(a){ var o=document.createElement("option"); o.value=a; o.textContent=a; sel.appendChild(o); });
+  document.getElementById("form").style.display = "";
+  document.getElementById("bar").style.display = "";
+}
+function send(){
+  if(SENDING) return;
+  var act = document.getElementById("act").value, note = document.getElementById("note").value.trim();
+  if(!act) return say("bad", "請選應對。");
+  if(!note) return say("bad", "請填說明。");
+  SENDING = true;
+  var b = document.getElementById("send"); b.disabled = true; b.textContent = "送出中…"; say("", "");
+  fetch(ENDPOINT + "/qa-handle", {method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({q:Q.q, u:Q.u, s:Q.s, hs:Q.hs, action:act, note:note})})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d.result){ return showResult(d.result); }
+      if(!d.ok) throw new Error(d.error || "送出失敗");
+      showResult({action:act, note:note, by:"你", at:"剛剛"});
+    })
+    .catch(function(e){
+      SENDING = false; b.disabled = false; b.textContent = "送出處理";
+      say("bad", "送出失敗：" + esc(e.message) + "<br>內容都還在，可以直接再按一次送出。");
+    });
+}
+(function(){
+  if(!Q.q || !Q.u || !Q.s || !Q.hs){
+    document.getElementById("sub").textContent = "";
+    return say("bad", "請從品質異常通知卡片上的「處理」鈕進入。");
+  }
+  fetch(ENDPOINT + "/qa-case?" + ["q","u","s","hs"].map(function(k){
+      return k + "=" + encodeURIComponent(Q[k]); }).join("&"))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok){ document.getElementById("sub").textContent = ""; return say("bad", esc(d.error || "讀取失敗")); }
+      fill(d);
+    })
+    .catch(function(e){ document.getElementById("sub").textContent = ""; say("bad", "讀取失敗：" + esc(e.message)); });
+})();
+</script>
+</body>
+</html>
