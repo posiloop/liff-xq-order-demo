@@ -589,8 +589,8 @@ function showUnpaid(d){
   if(d.blocked){ return showBlocked(d); }
   let rows = d.items.map(x=>'<tr><td>'+Number(x.month.slice(5))+' 月貨款</td><td>$'+fmt(x.amount)+'</td></tr>').join("");
   const warn = d.block_date
-    ? '請儘速付款。若於 <u>'+mdLabel(d.block_date)+'</u> 前仍未付清，將暫停本店叫貨功能。'
-    : '請儘速付款，逾期未付將暫停本店叫貨功能。';
+    ? '請儘速付款。若於 <u>'+mdLabel(d.block_date)+'</u> 前仍未付清，將暫停本店叫貨功能，部分應到貨商品也將暫停出貨。'
+    : '請儘速付款，逾期未付將暫停本店叫貨功能，部分應到貨商品也將暫停出貨。';
   const m=document.createElement("div"); m.className="unpaid-mask";
   m.innerHTML='<div class="unpaid-box"><div class="hd">⚠️ 貨款未付通知</div><div class="bd">'
     +esc(d.store||"")+' 目前有以下貨款尚未付清：<table>'+rows+'</table>'
@@ -607,7 +607,7 @@ function showBlocked(d){
   let rows = d.items.map(x=>'<tr><td>'+Number(x.month.slice(5))+' 月貨款</td><td>$'+fmt(x.amount)+'</td></tr>').join("");
   const m=document.createElement("div"); m.className="unpaid-mask"; m.style.background="rgba(0,0,0,.75)";
   m.innerHTML='<div class="unpaid-box"><div class="hd">⛔ 本店叫貨功能已暫停</div><div class="bd">'
-    +esc(d.store||"")+' 以下貨款逾期未付'+(d.block_date?'，自 '+mdLabel(d.block_date)+'起暫停叫貨':'')+'：<table>'+rows+'</table>'
+    +esc(d.store||"")+' 以下貨款逾期未付'+(d.block_date?'，自 '+mdLabel(d.block_date)+'起暫停叫貨':'，已暫停叫貨')+'，部分應到貨商品也將暫停出貨：<table>'+rows+'</table>'
     +'<div class="sum"><span>合計未付</span><span>$'+fmt(d.total)+'</span></div>'
     +'<div class="warn" style="background:#f3f4f6;color:var(--ink);font-weight:400">付款後請把匯款證明私訊給軒徹，<br>確認入帳後會自動恢復叫貨。</div></div>'
     +'<button type="button">關閉</button></div>';
