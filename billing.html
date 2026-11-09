@@ -86,6 +86,22 @@
   .msg.warn{display:block;background:#fff6e6;border:1px solid #f0d49a;color:var(--warn)}
   .msg.bad{display:block;background:#fdecea;border:1px solid #f3b7b0;color:var(--bad)}
   .empty{text-align:center;color:var(--muted);padding:40px 12px;font-size:15px}
+  /* ───── 貨款未付通知（軒徹 2026-10-29 msg34650·10-30 msg34741 上線）───── */
+  .unpaid-mask{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.55);
+               display:flex;align-items:center;justify-content:center;padding:20px}
+  .unpaid-box{background:#fff;border-radius:16px;width:100%;max-width:360px;overflow:hidden;
+              box-shadow:0 12px 40px rgba(0,0,0,.3)}
+  .unpaid-box .hd{background:var(--bad);color:#fff;padding:16px 18px;font-size:19px;font-weight:700}
+  .unpaid-box .bd{padding:16px 18px;font-size:15px}
+  .unpaid-box table{border:0;margin:10px 0 12px;table-layout:auto;width:100%;border-radius:0}
+  .unpaid-box td:last-child{text-align:right;white-space:nowrap}
+  .unpaid-box td{padding:7px 4px;font-size:15px;width:auto}
+  .unpaid-box .usum{display:flex;justify-content:space-between;font-weight:700;font-size:17px;
+                    border-top:2px solid var(--ink);padding:8px 4px 0;margin:-6px 0 14px}
+  .unpaid-box .warn{background:#fdecea;color:var(--bad);border-radius:10px;padding:10px 12px;
+                    font-weight:700;line-height:1.6}
+  .unpaid-box button{display:block;width:calc(100% - 36px);margin:0 18px 18px;padding:13px;border:0;
+                     border-radius:12px;background:var(--ink);color:#fff;font-size:16px;font-weight:700}
 </style>
 </head>
 <body>
@@ -105,6 +121,46 @@
 </main>
 <div class="sum"><span id="sumLabel">合計</span><span class="adj" id="sumAdj"></span><b id="sumVal">—</b></div>
 
+<script>
+/* ───────── 帳單頁也跳貨款未付通知（軒徹 2026-11-09 msg37185·樣品）─────────
+   跟叫貨頁同一支後端 /xq/unpaid、同一段文字；只有看單一家店時才跳，同一店一次開頁只跳一次。
+   ⛔ 拿不到資料就不跳（通知不是閘門）。帳單頁沒有送出鈕，封鎖中只換標題文字，不鎖任何東西。 */
+var UNPAID_SHOWN = {};
+function fmtN(n){ return Number(n||0).toLocaleString("en-US",{maximumFractionDigits:0}); }
+function mdLabel(iso){ var p=String(iso).split("-"); return Number(p[1])+" 月 "+Number(p[2])+" 日"; }
+function showUnpaid(d){
+  if(!d || !d.ok || !d.items || !d.items.length) return;
+  var rows = d.items.map(function(x){ return '<tr><td>'+Number(x.month.slice(5))+' 月貨款</td><td>$'+fmtN(x.amount)+'</td></tr>'; }).join("");
+  var hd, warn;
+  if(d.blocked){
+    hd = '⛔ 本店叫貨功能已暫停';
+    warn = '<div class="warn" style="background:#f3f4f6;color:var(--ink);font-weight:400">付款後請把匯款證明私訊給軒徹，<br>確認入帳後會自動恢復叫貨。</div>';
+  } else {
+    hd = '⚠️ 貨款未付通知';
+    warn = '<div class="warn">' + (d.block_date
+      ? '請儘速付款。若於 <u>'+mdLabel(d.block_date)+'</u> 前仍未付清，將暫停本店叫貨功能，部分應到貨商品也將暫停出貨。'
+      : '請儘速付款，逾期未付將暫停本店叫貨功能，部分應到貨商品也將暫停出貨。') + '</div>';
+  }
+  var m=document.createElement("div"); m.className="unpaid-mask";
+  m.innerHTML='<div class="unpaid-box"><div class="hd">'+hd+'</div><div class="bd">'
+    +esc(d.store||"")+' 目前有以下貨款尚未付清：<table>'+rows+'</table>'
+    +'<div class="usum"><span>合計未付</span><span>$'+fmtN(d.total)+'</span></div>'+warn+'</div>'
+    +'<button type="button">我知道了</button></div>';
+  m.querySelector("button").onclick=function(){ m.remove(); };
+  document.body.appendChild(m);
+}
+function checkUnpaid(d){
+  if(window.UNPAID_PREVIEW){ if(!UNPAID_SHOWN._p){ UNPAID_SHOWN._p=1; showUnpaid(window.UNPAID_PREVIEW); } return; }
+  var nos = {}; (d.rows||[]).forEach(function(r){ nos[r.store_no]=1; });
+  var s = STORE || (Object.keys(nos).length===1 ? Object.keys(nos)[0] : "");
+  if(!s || UNPAID_SHOWN[s]) return;
+  UNPAID_SHOWN[s] = 1;
+  fetch(ENDPOINT+"/unpaid?store="+encodeURIComponent(s)
+        +"&u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG))
+    .then(function(r){ return r.json(); }).then(showUnpaid)
+    .catch(function(e){ console.warn("未付通知拿不到資料，不顯示:", e); });
+}
+</script>
 <script>
 var ENDPOINT = "https://hook.aemassinc.net/xq";
 function qs(k){
@@ -311,6 +367,7 @@ function load(){
         }
       }
       DATA = d; PERIOD = d.period; say("", ""); render();
+      checkUnpaid(d);
     })
     .catch(function(e){
       document.getElementById("sub").textContent = "讀取失敗";
