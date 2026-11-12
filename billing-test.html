@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>享奇雞 帳單（測試版）</title>
+<style>
+  :root{
+    --bg:#f5f5f3; --card:#fff; --line:#e0ddd8; --ink:#1c1c1c; --muted:#6b6b6b;
+    --brand:#0f7b3f; --brand-soft:#eef7f1; --ok:#0f7b3f; --bad:#b42318; --warn:#b06a00;
+    --tr:#1f4e79; --tr-soft:#eaf1f8;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  button,input,select,summary{touch-action:manipulation}
+  html,body{max-width:100%;overflow-x:hidden}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",system-ui,sans-serif;
+       font-size:16px;line-height:1.5;padding-bottom:96px}
+  header{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;
+         padding:calc(env(safe-area-inset-top) + 12px) 14px 12px}
+  header .t{font-weight:700;font-size:17px}
+  header .t small{display:block;font-weight:400;opacity:.92;font-size:12.5px}
+  main{padding:12px}
+
+  .pick{display:flex;gap:8px;margin-bottom:12px}
+  .pick select{flex:1;min-width:0;padding:11px 10px;border:1.5px solid var(--line);
+               border-radius:10px;background:var(--card);color:var(--ink);font-size:15px}
+
+  /* 本期摘要：先給結論（各店／各類別小計），明細在下面。 */
+  .digest{background:var(--card);border:1px solid var(--line);border-radius:12px;
+          padding:4px 12px;margin-bottom:12px}
+  .digest .r{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+             padding:8px 0;border-bottom:1px solid #f0eeea;font-size:15px}
+  .digest .r:last-child{border-bottom:0}
+  .digest .r small{color:var(--muted);font-size:12.5px;margin-left:6px}
+  .digest .r b{font-variant-numeric:tabular-nums;white-space:nowrap}
+  .digest .r>span{flex:1}
+  .digest .r.tap{cursor:pointer}
+  .digest .r.tap:after{content:"›";color:var(--muted);margin-left:6px}
+
+  /* 🔴 一張單一張卡（不是一列一張卡）。
+     軒徹 msg26224「每個欄位都蠻重要的」⇒ 十四欄一個都沒砍，只是換位置：
+     同一張單共用的欄（日期／單號／類別／店別／進貨人／進貨時間／備註）只在卡頭或卡尾印一次，
+     品項那幾欄（品名／貨號／數量／單位／單價／金額）才逐列印。
+     整張單的某一欄若各列不同（例如備註各寫各的），就退回逐列印，⛔ 不可只印第一列的值。
+     空白欄不印「—」佔一行：沒有值的欄不佔版面，有值就出現。 */
+  .od{background:var(--card);border:1px solid var(--line);border-radius:12px;
+      margin-bottom:10px;overflow:hidden}
+  .od summary{list-style:none;padding:10px 12px;display:flex;align-items:center;gap:8px;cursor:pointer}
+  .od summary::-webkit-details-marker{display:none}
+  .od .hd{flex:1;min-width:0}
+  .od .l1{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted)}
+  .od .kind{border-radius:999px;padding:1px 8px;font-size:12px;font-weight:600;white-space:nowrap;
+            background:var(--brand-soft);color:var(--brand)}
+  .od .kind.tr{background:var(--tr-soft);color:var(--tr)}
+  .od .l2{font-weight:700;font-size:16px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .od .sub{font-weight:700;font-size:17px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .od .sub.neg{color:var(--bad)}
+  .od .chev{color:var(--muted);font-size:14px;transition:transform .15s}
+  .od[open] .chev{transform:rotate(90deg)}
+
+  .li{display:grid;grid-template-columns:1fr auto;gap:0 10px;padding:8px 12px;border-top:1px solid #f0eeea}
+  .li .nm{font-size:15px;font-weight:600;word-break:break-all}
+  .li .cd{font-size:12px;color:var(--muted);font-weight:400;margin-left:4px}
+  .li .ca{font-size:13px;color:#555;font-variant-numeric:tabular-nums}
+  .li .am{grid-row:1 / span 2;grid-column:2;align-self:center;font-size:15px;font-weight:600;
+          font-variant-numeric:tabular-nums;white-space:nowrap}
+  .li .am.neg{color:var(--bad)}
+  .li .rn{grid-column:1 / span 2;font-size:12px;color:var(--muted)}
+  .ft{padding:8px 12px 10px;border-top:1px dashed var(--line);font-size:12.5px;color:var(--muted);
+      display:grid;grid-template-columns:auto 1fr;gap:2px 10px}
+  .ft b{font-weight:600;color:#555;white-space:nowrap}
+  .ft span{word-break:break-all}
+  .nil{color:var(--warn)}
+
+  .sum{position:fixed;left:0;right:0;bottom:0;background:var(--card);
+       border-top:1px solid var(--line);padding:12px 14px calc(env(safe-area-inset-bottom) + 12px);
+       display:flex;justify-content:space-between;align-items:baseline;font-size:16px}
+  .sum b{font-size:21px;color:var(--brand)}
+  .sum b.neg{color:var(--bad)}
+  /* 股東95折／上期扣抵（軒徹 2026-10-06 msg29207 圈的那格：標題與合計中間） */
+  .sum .adj{flex:1;text-align:right;padding:0 8px;font-size:12px;line-height:1.45;color:var(--muted)}
+  .sum #sumLabel{white-space:nowrap}
+  .sum .adj s{color:var(--muted)}
+  .msg{border-radius:10px;padding:11px 12px;margin-bottom:10px;font-size:14.5px;display:none}
+  .msg.warn{display:block;background:#fff6e6;border:1px solid #f0d49a;color:var(--warn)}
+  .msg.bad{display:block;background:#fdecea;border:1px solid #f3b7b0;color:var(--bad)}
+  .empty{text-align:center;color:var(--muted);padding:40px 12px;font-size:15px}
+  /* ───── 測試版：下載本期 PDF（軒徹 2026-11-12 msg38337）───── */
+  .testtag{display:inline-block;margin-left:6px;padding:0 7px;border-radius:999px;background:#fff;color:var(--brand);
+           font-size:11.5px;font-weight:700;vertical-align:2px}
+  .pdfbar{display:flex;gap:8px;margin-bottom:12px}
+  .pdfbar button,.pdfbar a{flex:1;display:block;text-align:center;padding:11px 10px;border-radius:10px;font-size:15px;
+           font-weight:700;text-decoration:none;border:1.5px solid var(--brand);background:var(--card);color:var(--brand)}
+  .pdfbar a.main{background:var(--brand);color:#fff}
+  .pdfbar button:disabled{opacity:.55}
+  .pdfhint{font-size:12.5px;color:var(--muted);margin:-6px 2px 12px;display:none}
+  #pdfroot{position:fixed;left:-20000px;top:0;z-index:-1}
+  .pg{width:794px;height:1123px;background:#fff;color:#111;padding:44px 46px 40px;position:relative;
+      font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",sans-serif;font-size:12.5px;line-height:1.45;overflow:hidden}
+  .pg h1{margin:0;font-size:22px;letter-spacing:1px}
+  .pg .meta{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;margin:12px 0 14px;font-size:13.5px}
+  .pg .meta b{color:#555;font-weight:600}
+  .pg table{width:100%;border-collapse:collapse;table-layout:fixed}
+  .pg th{background:#0f7b3f;color:#fff;font-weight:600;padding:6px 5px;font-size:12px;text-align:center}
+  .pg td{padding:5px 5px;border-bottom:1px solid #e3e0da;vertical-align:top;word-break:break-all}
+  .pg td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .pg td.c{text-align:center;white-space:nowrap}
+  .pg tr.st td{background:#f6f5f2;font-weight:700;border-bottom:1.5px solid #cfcac2}
+  .pg tr.og td{border-top:1.5px solid #bdb7ad;font-weight:600;background:#fbfbf9}
+  .pg .neg{color:#b42318}
+  .pg .tot{margin-top:16px;margin-left:auto;width:330px;font-size:14px}
+  .pg .tot div{display:flex;justify-content:space-between;padding:5px 2px;border-bottom:1px solid #e3e0da}
+  .pg .tot div.due{border-top:2px solid #111;border-bottom:0;font-size:18px;font-weight:700;color:#0f7b3f;padding-top:8px}
+  .pg .pno{position:absolute;bottom:18px;left:46px;right:46px;display:flex;justify-content:space-between;
+           font-size:11px;color:#888}
+  /* ───── 貨款未付通知（軒徹 2026-10-29 msg34650·10-30 msg34741 上線）───── */
+  .unpaid-mask{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.55);
+               display:flex;align-items:center;justify-content:center;padding:20px}
+  .unpaid-box{background:#fff;border-radius:16px;width:100%;max-width:360px;overflow:hidden;
+              box-shadow:0 12px 40px rgba(0,0,0,.3)}
+  .unpaid-box .hd{background:var(--bad);color:#fff;padding:16px 18px;font-size:19px;font-weight:700}
+  .unpaid-box .bd{padding:16px 18px;font-size:15px}
+  .unpaid-box table{border:0;margin:10px 0 12px;table-layout:auto;width:100%;border-radius:0}
+  .unpaid-box td:last-child{text-align:right;white-space:nowrap}
+  .unpaid-box td{padding:7px 4px;font-size:15px;width:auto}
+  .unpaid-box .usum{display:flex;justify-content:space-between;font-weight:700;font-size:17px;
+                    border-top:2px solid var(--ink);padding:8px 4px 0;margin:-6px 0 14px}
+  .unpaid-box .warn{background:#fdecea;color:var(--bad);border-radius:10px;padding:10px 12px;
+                    font-weight:700;line-height:1.6}
+  .unpaid-box button{display:block;width:calc(100% - 36px);margin:0 18px 18px;padding:13px;border:0;
+                     border-radius:12px;background:var(--ink);color:#fff;font-size:16px;font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <div class="t">帳單<span class="testtag">測試版</span>
+    <small id="sub">讀取中…</small>
+  </div>
+</header>
+<main>
+  <div id="msg" class="msg"></div>
+  <div class="pick">
+    <select id="pPeriod"></select>
+    <select id="pStore" style="display:none"></select>
+  </div>
+  <div class="pdfbar" id="pdfbar"><button type="button" id="pdfBtn" disabled>下載本期帳單 PDF</button></div>
+  <div class="pdfhint" id="pdfHint"></div>
+  <div id="digest"></div>
+  <div id="list"></div>
+</main>
+<div id="pdfroot"></div>
+<div class="sum"><span id="sumLabel">合計</span><span class="adj" id="sumAdj"></span><b id="sumVal">—</b></div>
+
+<script>
+/* ───────── 帳單頁也跳貨款未付通知（軒徹 2026-11-09 msg37185·樣品）─────────
+   跟叫貨頁同一支後端 /xq/unpaid、同一段文字；只有看單一家店時才跳，同一店一次開頁只跳一次。
+   ⛔ 拿不到資料就不跳（通知不是閘門）。帳單頁沒有送出鈕，封鎖中只換標題文字，不鎖任何東西。 */
+var UNPAID_SHOWN = {};
+function fmtN(n){ return Number(n||0).toLocaleString("en-US",{maximumFractionDigits:0}); }
+function mdLabel(iso){ var p=String(iso).split("-"); return Number(p[1])+" 月 "+Number(p[2])+" 日"; }
+function showUnpaid(d){
+  if(!d || !d.ok || !d.items || !d.items.length) return;
+  var rows = d.items.map(function(x){ return '<tr><td>'+Number(x.month.slice(5))+' 月貨款</td><td>$'+fmtN(x.amount)+'</td></tr>'; }).join("");
+  var hd, warn;
+  if(d.blocked){
+    hd = '⛔ 本店叫貨功能已暫停';
+    warn = '<div class="warn" style="background:#f3f4f6;color:var(--ink);font-weight:400">付款後請把匯款證明私訊給軒徹，<br>確認入帳後會自動恢復叫貨。</div>';
+  } else {
+    hd = '⚠️ 貨款未付通知';
+    warn = '<div class="warn">' + (d.block_date
+      ? '請儘速付款。若於 <u>'+mdLabel(d.block_date)+'</u> 前仍未付清，將暫停本店叫貨功能，部分應到貨商品也將暫停出貨。'
+      : '請儘速付款，逾期未付將暫停本店叫貨功能，部分應到貨商品也將暫停出貨。') + '</div>';
+  }
+  var m=document.createElement("div"); m.className="unpaid-mask";
+  m.innerHTML='<div class="unpaid-box"><div class="hd">'+hd+'</div><div class="bd">'
+    +esc(d.store||"")+' 目前有以下貨款尚未付清：<table>'+rows+'</table>'
+    +'<div class="usum"><span>合計未付</span><span>$'+fmtN(d.total)+'</span></div>'+warn+'</div>'
+    +'<button type="button">我知道了</button></div>';
+  m.querySelector("button").onclick=function(){ m.remove(); };
+  document.body.appendChild(m);
+}
+function checkUnpaid(d){
+  if(window.UNPAID_PREVIEW){ if(!UNPAID_SHOWN._p){ UNPAID_SHOWN._p=1; showUnpaid(window.UNPAID_PREVIEW); } return; }
+  var nos = {}; (d.rows||[]).forEach(function(r){ nos[r.store_no]=1; });
+  var s = STORE || (Object.keys(nos).length===1 ? Object.keys(nos)[0] : "");
+  if(!s || UNPAID_SHOWN[s]) return;
+  UNPAID_SHOWN[s] = 1;
+  fetch(ENDPOINT+"/unpaid?store="+encodeURIComponent(s)
+        +"&u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG))
+    .then(function(r){ return r.json(); }).then(showUnpaid)
+    .catch(function(e){ console.warn("未付通知拿不到資料，不顯示:", e); });
+}
+</script>
+<script>
+var ENDPOINT = "https://hook.aemassinc.net/xq";
+function qs(k){
+  var m = new RegExp("[?&]"+k+"=([^&]*)").exec(window.location.search);
+  return m ? decodeURIComponent(m[1].replace(/\+/g," ")) : "";
+}
+var Q_UID = qs("u"), Q_SIG = qs("s"), Q_STORE = qs("store");
+var DATA = null, PERIOD = qs("period") || "", STORE = Q_STORE || "";
+var STORES = null;          // 第一次載入（全部店別）時記下的店清單；篩選後 rows 只剩一家，不能再從 rows 推
+
+function esc(s){
+  return String(s === null || s === undefined ? "" : s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+function say(kind, html){
+  var el = document.getElementById("msg");
+  el.className = "msg" + (kind ? " " + kind : "");
+  el.innerHTML = html || "";
+}
+/* 千分位。⛔ 不用 toLocaleString：不同機型的分組與負號位置不一致。
+   帳單金額都是整數元，小數位是 .00 就不印（有小數才印兩位）。 */
+function money(n){
+  var v = Math.round(Number(n || 0) * 100) / 100, neg = v < 0, a = Math.abs(v);
+  var s = (a % 1 ? a.toFixed(2) : a.toFixed(0)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return (neg ? "-" : "") + s;
+}
+function num(n){
+  var v = Number(n || 0);
+  return (Math.round(v * 1000) / 1000).toString();
+}
+function md(d){ return String(d || "").slice(5).replace("-", "/"); }
+/* 期別名稱去掉括號那段（軒徹 msg38337）：「2026 年 10 月 下半（16–月底）」→「2026 年 10 月 下半」。
+   只在前端改顯示，後端 label 不動 ⇒ 正式頁 billing.html 照舊。 */
+function plabel(s){ return String(s || "").replace(/\s*[（(][^（）()]*[）)]\s*$/, ""); }
+
+/* 整張單共用的值：全部列相同 ⇒ 回那個值；有任何一列不同 ⇒ 回 null（呼叫端改逐列印）。 */
+function shared(rows, k){
+  var v = rows[0][k] || "";
+  for(var i=1;i<rows.length;i++){ if((rows[i][k] || "") !== v) return null; }
+  return v;
+}
+
+function render(){
+  var d = DATA, list = document.getElementById("list"), dg = document.getElementById("digest");
+  var multi = STORES && STORES.order.length > 1;
+
+  /* 依單號分組，保持後端排序（日期→店號→品名）第一次出現的順序。 */
+  var groups = [], byNo = {};
+  for(var i=0;i<d.rows.length;i++){
+    var r = d.rows[i], key = r.order_no + "|" + r.store_no;
+    if(!byNo[key]){ byNo[key] = {rows:[], total:0}; groups.push(byNo[key]); }
+    byNo[key].rows.push(r); byNo[key].total += Number(r.amount || 0);
+  }
+
+  document.getElementById("sub").textContent =
+    plabel(d.label) + "　" + groups.length + " 張單・" + d.count + " 筆";
+
+  /* 摘要：看全部店別 ⇒ 各店小計（點了切到那家）；只看一家 ⇒ 叫貨／調撥小計。 */
+  var h = "";
+  if(d.rows.length){
+    if(multi && !STORE){
+      var st = {}, so = [];
+      for(var a=0;a<d.rows.length;a++){
+        var x = d.rows[a];
+        if(!st[x.store_no]){ st[x.store_no] = {name:x.store, n:0, t:0}; so.push(x.store_no); }
+        st[x.store_no].t += Number(x.amount || 0);
+      }
+      for(var g=0;g<groups.length;g++){ st[groups[g].rows[0].store_no].n++; }
+      for(var b=0;b<so.length;b++){
+        var s = st[so[b]];
+        h += '<div class="r tap" data-store="' + esc(so[b]) + '"><span>' + esc(s.name)
+          + '<small>' + s.n + ' 張</small></span><b>' + money(s.t) + '</b></div>';
+      }
+    }else{
+      var kd = {}, ko = [];
+      for(var c=0;c<groups.length;c++){
+        var k = groups[c].rows[0].kind || "其他";
+        if(!kd[k]){ kd[k] = {n:0, t:0}; ko.push(k); }
+        kd[k].n++; kd[k].t += groups[c].total;
+      }
+      for(var e=0;e<ko.length;e++){
+        h += '<div class="r"><span>' + esc(ko[e]) + '<small>' + kd[ko[e]].n + ' 張</small></span><b>'
+          + money(kd[ko[e]].t) + '</b></div>';
+      }
+    }
+    h = '<div class="digest">' + h + '</div>';
+  }
+  dg.innerHTML = h;
+
+  if(!d.rows.length){
+    list.innerHTML = '<div class="empty">這一期還沒有任何帳單資料。<br>'
+      + '之後有進貨或調撥，就會逐條出現在這裡。</div>';
+  }else{
+    /* 一律預設收合，只看每張單的小計，點開才看品項（軒徹 msg27846「預設讓他們收起 不要展開」）。 */
+    var openAll = false;
+    h = "";
+    for(var q=0;q<groups.length;q++){
+      var G = groups[q].rows, f = G[0], tr = /調撥/.test(f.kind || "");
+      /* 進貨人／進貨時間**一律逐品項印**（軒徹 msg27843「每個品項可能不同時間」）：
+         同一張單的貨可以分批到、分別收，⛔ 不可收到卡尾只印一次。 */
+      var foot = [["備註","note"]];
+      var perRow = [];
+      h += '<details class="od"' + (openAll ? " open" : "") + '><summary><div class="hd">'
+        +   '<div class="l1"><span>' + esc(md(f.date)) + '</span>'
+        +     '<span class="kind' + (tr ? " tr" : "") + '">' + esc(f.kind || "—") + '</span>'
+        +     '<span>' + esc(f.order_no) + '</span></div>'
+        +   '<div class="l2">' + (multi && !STORE ? esc(f.store_no + " " + f.store) : esc(G.length + " 項")) + '</div>'
+        + '</div><span class="sub' + (groups[q].total < 0 ? " neg" : "") + '">' + money(groups[q].total) + '</span>'
+        + '<span class="chev">›</span></summary>';
+      for(var z=0;z<foot.length;z++){ if(shared(G, foot[z][1]) === null) perRow.push(foot[z]); }
+      for(var y=0;y<G.length;y++){
+        var R = G[y], neg = Number(R.amount) < 0, extra = [];
+        if(!R.who && !R.when) extra.push('進貨人／時間：<span class="nil">未登記</span>');
+        else extra.push("進貨人：" + (R.who ? esc(R.who) : '<span class="nil">未登記</span>')
+                      + "　" + (R.when ? esc(R.when) : '<span class="nil">時間未登記</span>'));
+        for(var w=0;w<perRow.length;w++){
+          var pv = R[perRow[w][1]];
+          if(pv) extra.push(perRow[w][0] + "：" + esc(pv));
+          else if(perRow[w][1] !== "note") extra.push(perRow[w][0] + '：<span class="nil">未登記</span>');
+        }
+        h += '<div class="li"><div class="nm">' + esc(R.item || "—")
+          +   '<span class="cd">' + esc(R.code || "") + '</span></div>'
+          +   '<div class="am' + (neg ? " neg" : "") + '">' + money(R.amount) + '</div>'
+          +   '<div class="ca">' + num(R.qty) + ' ' + esc(R.unit || "") + ' × ' + money(R.price) + '</div>'
+          +   (extra.length ? '<div class="rn">' + extra.join("　") + '</div>' : '')
+          + '</div>';
+      }
+      var ft = "";
+      if(!(multi && !STORE)) ft += '<b>店別</b><span>' + esc(f.store_no + " " + f.store) + '</span>';
+      /* 進貨人／進貨時間是「這張單有沒有人收貨」的證據（軒徹 msg27840），空的也要印「未登記」，
+         ⛔ 不可跟備註一樣空了就藏——藏起來看起來像版面把它弄丟了，不是沒人收。 */
+      for(var u=0;u<foot.length;u++){
+        var v = shared(G, foot[u][1]);
+        if(v === null) continue;
+        if(v) ft += '<b>' + foot[u][0] + '</b><span>' + esc(v) + '</span>';
+        else if(foot[u][1] !== "note") ft += '<b>' + foot[u][0] + '</b><span class="nil">未登記</span>';
+      }
+      h += (ft ? '<div class="ft">' + ft + '</div>' : '') + '</details>';
+    }
+    list.innerHTML = h;
+  }
+
+  document.getElementById("sumLabel").textContent = "本期合計（" + groups.length + " 張單）";
+  /* 股東95折只套在最外面這一格（軒徹 2026-10-06 msg29205）：上面的單據卡與小計都是原價，
+     這裡列出原價、折扣、扣抵，右邊顯示折後應付。後端沒給 adjustments（舊版）就照原價顯示。 */
+  var adj = d.adjustments || [], ah = "";
+  var due = (d.due === undefined || d.due === null) ? d.total : d.due;
+  if(adj.length){
+    var many = {};
+    for(var a=0;a<adj.length;a++){ many[adj[a].store_no] = 1; }
+    var tag = Object.keys(many).length > 1;
+    ah = '<span style="white-space:nowrap">原價 ' + money(d.total) + '</span>';
+    for(var a2=0;a2<adj.length;a2++){
+      var nm = tag && STORES && STORES.name[adj[a2].store_no] ? STORES.name[adj[a2].store_no] + ' ' : '';
+      ah += '<br><span style="white-space:nowrap">' + esc(nm + adj[a2].label) + ' -' + money(-adj[a2].amount) + '</span>';
+    }
+  }
+  document.getElementById("sumAdj").innerHTML = ah;
+  var sv = document.getElementById("sumVal");
+  sv.textContent = money(due);
+  sv.className = Number(due) < 0 ? "neg" : "";
+
+  /* 期別下拉。⛔ 後端只給「到今天為止」的期別，這裡不要自己補未來的月份。 */
+  var ps = document.getElementById("pPeriod");
+  if(!ps.options.length){
+    var oh = "";
+    for(var j=0;j<d.periods.length;j++){
+      oh += '<option value="' + esc(d.periods[j].id) + '">'
+          + esc(plabel(d.periods[j].label)) + '</option>';
+    }
+    ps.innerHTML = oh;
+  }
+  ps.value = d.period;
+
+  /* 綁了兩家以上才顯示店別下拉；只有一家就不要多一顆沒得選的選單。 */
+  var ss = document.getElementById("pStore");
+  if(multi){
+    if(!ss.options.length){
+      var sh = '<option value="">全部店別</option>';
+      for(var m=0;m<STORES.order.length;m++){
+        sh += '<option value="' + esc(STORES.order[m]) + '">' + esc(STORES.name[STORES.order[m]]) + '</option>';
+      }
+      ss.innerHTML = sh;
+    }
+    ss.value = STORE || "";
+    ss.style.display = "";
+  }
+}
+
+function load(){
+  if(!Q_UID || !Q_SIG){
+    document.getElementById("sub").textContent = "缺少身分資訊";
+    say("warn", "此連結缺少身分資訊，無法顯示帳單。<br>請返回 LINE 重新點選「<b>帳單</b>」。");
+    return;
+  }
+  var url = ENDPOINT+"/billing?u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG)
+          + (STORE ? "&store="+encodeURIComponent(STORE) : "")
+          + (PERIOD ? "&period="+encodeURIComponent(PERIOD) : "");
+  fetch(url).then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok){ throw new Error(d.error || "讀不到資料"); }
+      if(!STORES && !STORE){
+        STORES = {order:[], name:{}};
+        for(var k=0;k<d.rows.length;k++){
+          var key = d.rows[k].store_no;
+          if(!STORES.name[key]){ STORES.name[key] = d.rows[k].store; STORES.order.push(key); }
+        }
+      }
+      DATA = d; PERIOD = d.period; say("", ""); render();
+      pdfReady();
+      checkUnpaid(d);
+    })
+    .catch(function(e){
+      document.getElementById("sub").textContent = "讀取失敗";
+      say("bad", "帳單讀取失敗：" + esc(e.message));
+    });
+}
+
+document.getElementById("pPeriod").addEventListener("change", function(){
+  PERIOD = this.value; pdfReset(); load();
+});
+document.getElementById("pStore").addEventListener("change", function(){
+  STORE = this.value; pdfReset(); load();
+});
+document.getElementById("digest").addEventListener("click", function(ev){
+  var t = ev.target.closest(".r.tap");
+  if(!t) return;
+  STORE = t.getAttribute("data-store"); pdfReset(); load(); window.scrollTo(0, 0);
+});
+load();
+</script>
+<script>
+/* ───────── 測試版：下載本期帳單 PDF（軒徹 2026-11-12 msg38337）─────────
+   🔴 純前端：PDF 用頁面已經拿到的 DATA 排版（同一份 rows／total／adjustments／due），
+      ⛔ 不打任何新後端、不寫任何表 ⇒ 數字必然跟畫面那格一樣。
+   🔴 LINE 內建瀏覽器存不了 blob 檔 ⇒ 在 LINE 裡按下去，改用 openExternalBrowser=1
+      把「同一期、同一店」的網址丟到手機預設瀏覽器，在那裡產檔、按「儲存 PDF」。
+   中文字是瀏覽器自己的字型畫進 canvas 再包成 A4 PDF（3 倍解析度），⛔ 不靠 PDF 內嵌中文字型。 */
+var IN_LINE = /\bLine\//i.test(navigator.userAgent);
+var WANT_PDF = qs("pdf") === "1";
+var PDF_URL = null, PDF_AUTO_DONE = false;
+
+function pdfBar(html){ document.getElementById("pdfbar").innerHTML = html; }
+function pdfHint(t){ var h=document.getElementById("pdfHint"); h.textContent=t||""; h.style.display=t?"block":"none"; }
+function pdfReset(){
+  if(PDF_URL){ try{ URL.revokeObjectURL(PDF_URL); }catch(e){} PDF_URL = null; }
+  pdfBar('<button type="button" id="pdfBtn" disabled>下載本期帳單 PDF</button>'); pdfHint("");
+}
+function pdfReady(){
+  if(PDF_URL) return;
+  pdfBar('<button type="button" id="pdfBtn">下載本期帳單 PDF</button>');
+  document.getElementById("pdfBtn").onclick = onPdfClick;
+  if(WANT_PDF && !PDF_AUTO_DONE){ PDF_AUTO_DONE = true; makePdf(); }
+}
+function onPdfClick(){
+  if(IN_LINE && !WANT_PDF){
+    /* 帶著目前選的期別／店別，用外部瀏覽器重開，到那邊自動產檔。 */
+    var q = "u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG)
+          + "&period="+encodeURIComponent(PERIOD) + (STORE ? "&store="+encodeURIComponent(STORE) : "")
+          + "&pdf=1&openExternalBrowser=1";
+    pdfHint("正在用手機瀏覽器開啟，請在新開的頁面按「儲存 PDF」。");
+    window.location.href = location.pathname + "?" + q;
+    return;
+  }
+  makePdf();
+}
+function loadJs(src){
+  return new Promise(function(ok, bad){
+    var s=document.createElement("script"); s.src=src; s.onload=ok;
+    s.onerror=function(){ bad(new Error("元件載入失敗：" + src.split("/").pop())); };
+    document.head.appendChild(s);
+  });
+}
+function pdfLibs(){
+  return Promise.all([
+    window.html2canvas ? 0 : loadJs("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"),
+    (window.jspdf && window.jspdf.jsPDF) ? 0 : loadJs("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js")
+  ]);
+}
+function storeTitle(d){
+  if(STORE){ var r = d.rows[0]; return r ? r.store_no + " " + r.store : STORE; }
+  var seen = {}, out = [];
+  d.rows.forEach(function(r){ if(!seen[r.store_no]){ seen[r.store_no]=1; out.push(r.store_no+" "+r.store); } });
+  return out.length === 1 ? out[0] : "全部店別（" + out.length + " 家）";
+}
+function pdfName(d){
+  var st = storeTitle(d).replace(/\s+/g, "").replace(/[\\\/:*?"<>|（）]/g, "");
+  return "享奇雞帳單_" + st + "_" + d.period.slice(0,7) + (d.period.slice(-1) === "A" ? "上半" : "下半") + ".pdf";
+}
+
+/* 把帳單排成 A4 頁（794×1123 CSS px）。一列一列塞，塞不下就換頁並重印表頭。 */
+function buildPages(d){
+  var root = document.getElementById("pdfroot"); root.innerHTML = "";
+  var multi = !STORE && STORES && STORES.order.length > 1;
+  var groups = [], byNo = {};
+  d.rows.forEach(function(r){
+    var k = r.order_no + "|" + r.store_no;
+    if(!byNo[k]){ byNo[k] = {rows:[], total:0}; groups.push(byNo[k]); }
+    byNo[k].rows.push(r); byNo[k].total += Number(r.amount || 0);
+  });
+  var now = new Date(), stamp = now.getFullYear()+"/"+(now.getMonth()+1)+"/"+now.getDate()+" "
+      + ("0"+now.getHours()).slice(-2)+":"+("0"+now.getMinutes()).slice(-2);
+  var colg = '<colgroup><col style="width:50px"><col style="width:112px"><col style="width:52px">'
+           + '<col><col style="width:78px"><col style="width:74px"><col style="width:66px"><col style="width:76px"></colgroup>';
+  var thead = '<thead><tr><th>日期</th><th>單號</th><th>類別</th><th>品名</th><th>貨號</th>'
+            + '<th>數量</th><th>單價</th><th>金額</th></tr></thead>';
+  var pages = [];
+  function newPage(first){
+    var pg = document.createElement("div"); pg.className = "pg";
+    pg.innerHTML = (first
+        ? '<h1>享奇雞 應收帳單</h1><div class="meta"><b>店別</b><span>' + esc(storeTitle(d)) + '</span>'
+          + '<b>期別</b><span>' + esc(plabel(d.label)) + '</span>'
+          + '<b>筆數</b><span>' + groups.length + ' 張單・' + d.count + ' 筆</span></div>'
+        : '<div class="meta" style="margin-top:0"><b>店別</b><span>' + esc(storeTitle(d)) + '　'
+          + esc(plabel(d.label)) + '（續）</span></div>')
+      + '<table>' + colg + thead + '<tbody></tbody></table>'
+      + '<div class="pno"><span>產出時間 ' + stamp + '</span><span class="pn"></span></div>';
+    root.appendChild(pg); pages.push(pg);
+    return pg;
+  }
+  var LIMIT = 1123 - 40 - 30;                       // 底邊留給頁碼
+  function fits(pg){ return pg.querySelector("table").getBoundingClientRect().bottom
+                            - pg.getBoundingClientRect().top <= LIMIT; }
+  var pg = newPage(true), tb = pg.querySelector("tbody");
+  function addRow(html){
+    var tmp = document.createElement("tbody"); tmp.innerHTML = html;
+    var tr = tmp.firstChild; tb.appendChild(tr);
+    if(!fits(pg)){ tb.removeChild(tr); pg = newPage(false); tb = pg.querySelector("tbody"); tb.appendChild(tr); }
+  }
+  if(!d.rows.length){
+    addRow('<tr><td colspan="8" class="c" style="padding:30px">這一期沒有任何帳單資料</td></tr>');
+  }
+  var lastStore = null;
+  groups.forEach(function(g){
+    var f = g.rows[0], neg = g.total < 0;
+    if(multi && f.store_no !== lastStore){
+      lastStore = f.store_no;
+      addRow('<tr class="st"><td colspan="8">' + esc(f.store_no + " " + f.store) + '</td></tr>');
+    }
+    g.rows.forEach(function(r, i){
+      var n = Number(r.amount) < 0;
+      addRow('<tr' + (i === 0 ? ' class="og"' : '') + '>'
+        + '<td class="c">' + (i === 0 ? esc(md(r.date)) : '') + '</td>'
+        + '<td>' + (i === 0 ? esc(r.order_no) : '') + '</td>'
+        + '<td class="c">' + (i === 0 ? esc(r.kind || "") : '') + '</td>'
+        + '<td>' + esc(r.item || "—") + (r.note ? '<br><span style="color:#777;font-size:11px">備註：' + esc(r.note) + '</span>' : '') + '</td>'
+        + '<td class="c">' + esc(r.code || "") + '</td>'
+        + '<td class="n">' + esc(num(r.qty)) + ' ' + esc(r.unit || "") + '</td>'
+        + '<td class="n">' + money(r.price) + '</td>'
+        + '<td class="n' + (n ? ' neg' : '') + '">' + money(r.amount) + '</td></tr>');
+    });
+    if(g.rows.length > 1){
+      addRow('<tr><td colspan="7" class="n" style="color:#555">單號 ' + esc(f.order_no) + ' 小計</td>'
+        + '<td class="n' + (neg ? ' neg' : '') + '" style="font-weight:700">' + money(g.total) + '</td></tr>');
+    }
+  });
+  /* 合計框：原價 → 折扣／扣抵 → 本期合計（與畫面底部同一組數字）。 */
+  var adj = d.adjustments || [], due = (d.due === undefined || d.due === null) ? d.total : d.due;
+  var tag = {}; adj.forEach(function(a){ tag[a.store_no] = 1; }); var many = Object.keys(tag).length > 1;
+  var th = '<div><span>原價合計</span><span>' + money(d.total) + '</span></div>';
+  adj.forEach(function(a){
+    var nm = many && STORES && STORES.name[a.store_no] ? STORES.name[a.store_no] + ' ' : '';
+    th += '<div><span>' + esc(nm + a.label) + '</span><span class="neg">-' + money(-a.amount) + '</span></div>';
+  });
+  th += '<div class="due"><span>本期合計（' + groups.length + ' 張單）</span><span>' + money(due) + '</span></div>';
+  var box = document.createElement("div"); box.className = "tot"; box.innerHTML = th;
+  pg.appendChild(box);
+  if(box.getBoundingClientRect().bottom - pg.getBoundingClientRect().top > LIMIT){
+    pg.removeChild(box); pg = newPage(false); pg.appendChild(box);
+  }
+  pages.forEach(function(p, i){ p.querySelector(".pn").textContent = "第 " + (i+1) + " / " + pages.length + " 頁"; });
+  return pages;
+}
+
+function makePdf(){
+  var d = DATA; if(!d) return;
+  pdfBar('<button type="button" disabled>PDF 產生中…</button>'); pdfHint("");
+  var name = pdfName(d);
+  return pdfLibs().then(function(){
+    var pages = buildPages(d), doc = new window.jspdf.jsPDF({unit:"mm", format:"a4", compress:true});
+    var chain = Promise.resolve();
+    pages.forEach(function(p, i){
+      chain = chain.then(function(){
+        return window.html2canvas(p, {scale:3, backgroundColor:"#ffffff", logging:false, useCORS:true});
+      }).then(function(cv){
+        if(i) doc.addPage("a4", "p");
+        doc.addImage(cv.toDataURL("image/png"), "PNG", 0, 0, 210, 297, undefined, "FAST");
+      });
+    });
+    return chain.then(function(){
+      document.getElementById("pdfroot").innerHTML = "";
+      doc.setProperties({title: name.replace(/\.pdf$/, "")});
+      var blob = doc.output("blob");
+      window.__pdfBlob = blob; window.__pdfName = name;
+      PDF_URL = URL.createObjectURL(blob);
+      pdfBar('<a class="main" id="pdfSave" href="' + PDF_URL + '" download="' + esc(name) + '">儲存 PDF</a>'
+           + '<a href="' + PDF_URL + '" target="_blank" rel="noopener">開啟 PDF</a>');
+      pdfHint(IN_LINE
+        ? "如果按了沒反應：請點右下「⋯」→「在瀏覽器中開啟」，再按一次下載。"
+        : "檔名：" + name);
+    });
+  }).catch(function(e){
+    pdfBar('<button type="button" id="pdfBtn">重試：下載本期帳單 PDF</button>');
+    document.getElementById("pdfBtn").onclick = makePdf;
+    pdfHint("PDF 產生失敗：" + e.message);
+  });
+}
+</script>
+<script>
+/* 底部固定列的高度會跟著手機字級放大；寫死的 body padding-bottom 在安卓大字級下會把最後幾列蓋住、滑不到
+   （軒徹 2026-09-29 msg27566 店家影片）。改成量它實際多高再留空間。 */
+(function(){var f=document.querySelector('.sum');if(!f)return;
+  function fit(){document.body.style.paddingBottom=(f.offsetHeight+16)+'px';}
+  fit();window.addEventListener('resize',fit);
+  if(window.ResizeObserver)new ResizeObserver(fit).observe(f);})();
+</script>
+</body>
+</html>
