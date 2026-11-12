@@ -86,6 +86,35 @@
   .msg.warn{display:block;background:#fff6e6;border:1px solid #f0d49a;color:var(--warn)}
   .msg.bad{display:block;background:#fdecea;border:1px solid #f3b7b0;color:var(--bad)}
   .empty{text-align:center;color:var(--muted);padding:40px 12px;font-size:15px}
+  /* ───── 測試版：下載本期 PDF（軒徹 2026-11-12 msg38337）───── */
+  .testtag{display:inline-block;margin-left:6px;padding:0 7px;border-radius:999px;background:#fff;color:var(--brand);
+           font-size:11.5px;font-weight:700;vertical-align:2px}
+  .pdfbar{display:flex;gap:8px;margin-bottom:12px}
+  .pdfbar button,.pdfbar a{flex:1;display:block;text-align:center;padding:11px 10px;border-radius:10px;font-size:15px;
+           font-weight:700;text-decoration:none;border:1.5px solid var(--brand);background:var(--card);color:var(--brand)}
+  .pdfbar a.main{background:var(--brand);color:#fff}
+  .pdfbar button:disabled{opacity:.55}
+  .pdfhint{font-size:12.5px;color:var(--muted);margin:-6px 2px 12px;display:none}
+  #pdfroot{position:fixed;left:-20000px;top:0;z-index:-1}
+  .pg{width:794px;height:1123px;background:#fff;color:#111;padding:44px 46px 40px;position:relative;
+      font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",sans-serif;font-size:12.5px;line-height:1.45;overflow:hidden}
+  .pg h1{margin:0;font-size:22px;letter-spacing:1px}
+  .pg .meta{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;margin:12px 0 14px;font-size:13.5px}
+  .pg .meta b{color:#555;font-weight:600}
+  .pg table{width:100%;border-collapse:collapse;table-layout:fixed}
+  .pg th{background:#0f7b3f;color:#fff;font-weight:600;padding:6px 5px;font-size:12px;text-align:center}
+  .pg td{padding:5px 5px;border-bottom:1px solid #e3e0da;vertical-align:top;word-break:break-all}
+  .pg td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .pg td.c{text-align:center;white-space:nowrap}
+  .pg tr.st td{background:#f6f5f2;font-weight:700;border-bottom:1.5px solid #cfcac2}
+  .pg tr.og td{border-top:1.5px solid #bdb7ad;background:#fbfbf9}
+  .pg td.on{white-space:nowrap}
+  .pg .neg{color:#b42318}
+  .pg .tot{margin-top:16px;margin-left:auto;width:330px;font-size:14px}
+  .pg .tot div{display:flex;justify-content:space-between;padding:5px 2px;border-bottom:1px solid #e3e0da}
+  .pg .tot div.due{border-top:2px solid #111;border-bottom:0;font-size:18px;font-weight:700;color:#0f7b3f;padding-top:8px}
+  .pg .pno{position:absolute;bottom:18px;left:46px;right:46px;display:flex;justify-content:space-between;
+           font-size:11px;color:#888}
   /* ───── 貨款未付通知（軒徹 2026-10-29 msg34650·10-30 msg34741 上線）───── */
   .unpaid-mask{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.55);
                display:flex;align-items:center;justify-content:center;padding:20px}
@@ -116,9 +145,12 @@
     <select id="pPeriod"></select>
     <select id="pStore" style="display:none"></select>
   </div>
+  <div class="pdfbar" id="pdfbar"><button type="button" id="pdfBtn" disabled>下載本期帳單 PDF</button></div>
+  <div class="pdfhint" id="pdfHint"></div>
   <div id="digest"></div>
   <div id="list"></div>
 </main>
+<div id="pdfroot"></div>
 <div class="sum"><span id="sumLabel">合計</span><span class="adj" id="sumAdj"></span><b id="sumVal">—</b></div>
 
 <script>
@@ -192,6 +224,9 @@ function num(n){
   return (Math.round(v * 1000) / 1000).toString();
 }
 function md(d){ return String(d || "").slice(5).replace("-", "/"); }
+/* 期別名稱去掉括號那段（軒徹 msg38337）：「2026 年 10 月 下半（16–月底）」→「2026 年 10 月 下半」。
+   只在前端改顯示，後端 label 不動 ⇒ 正式頁 billing.html 照舊。 */
+function plabel(s){ return String(s || "").replace(/\s*[（(][^（）()]*[）)]\s*$/, ""); }
 
 /* 整張單共用的值：全部列相同 ⇒ 回那個值；有任何一列不同 ⇒ 回 null（呼叫端改逐列印）。 */
 function shared(rows, k){
@@ -213,7 +248,7 @@ function render(){
   }
 
   document.getElementById("sub").textContent =
-    d.label + "　" + groups.length + " 張單・" + d.count + " 筆";
+    plabel(d.label) + "　" + groups.length + " 張單・" + d.count + " 筆";
 
   /* 摘要：看全部店別 ⇒ 各店小計（點了切到那家）；只看一家 ⇒ 叫貨／調撥小計。 */
   var h = "";
@@ -326,7 +361,7 @@ function render(){
     var oh = "";
     for(var j=0;j<d.periods.length;j++){
       oh += '<option value="' + esc(d.periods[j].id) + '">'
-          + esc(d.periods[j].label) + '</option>';
+          + esc(plabel(d.periods[j].label)) + '</option>';
     }
     ps.innerHTML = oh;
   }
@@ -367,6 +402,7 @@ function load(){
         }
       }
       DATA = d; PERIOD = d.period; say("", ""); render();
+      pdfReady();
       checkUnpaid(d);
     })
     .catch(function(e){
@@ -376,17 +412,194 @@ function load(){
 }
 
 document.getElementById("pPeriod").addEventListener("change", function(){
-  PERIOD = this.value; load();
+  PERIOD = this.value; pdfReset(); load();
 });
 document.getElementById("pStore").addEventListener("change", function(){
-  STORE = this.value; load();
+  STORE = this.value; pdfReset(); load();
 });
 document.getElementById("digest").addEventListener("click", function(ev){
   var t = ev.target.closest(".r.tap");
   if(!t) return;
-  STORE = t.getAttribute("data-store"); load(); window.scrollTo(0, 0);
+  STORE = t.getAttribute("data-store"); pdfReset(); load(); window.scrollTo(0, 0);
 });
 load();
+</script>
+<script>
+/* ───────── 測試版：下載本期帳單 PDF（軒徹 2026-11-12 msg38337）─────────
+   🔴 純前端：PDF 用頁面已經拿到的 DATA 排版（同一份 rows／total／adjustments／due），
+      ⛔ 不打任何新後端、不寫任何表 ⇒ 數字必然跟畫面那格一樣。
+   🔴 LINE 內建瀏覽器存不了 blob 檔 ⇒ 在 LINE 裡按下去，改用 openExternalBrowser=1
+      把「同一期、同一店」的網址丟到手機預設瀏覽器，在那裡產檔、按「儲存 PDF」。
+   中文字是瀏覽器自己的字型畫進 canvas 再包成 A4 PDF（3 倍解析度），⛔ 不靠 PDF 內嵌中文字型。 */
+var IN_LINE = /\bLine\//i.test(navigator.userAgent);
+var WANT_PDF = qs("pdf") === "1";
+var PDF_URL = null, PDF_AUTO_DONE = false;
+
+function pdfBar(html){ document.getElementById("pdfbar").innerHTML = html; }
+function pdfHint(t){ var h=document.getElementById("pdfHint"); h.textContent=t||""; h.style.display=t?"block":"none"; }
+function pdfReset(){
+  if(PDF_URL){ try{ URL.revokeObjectURL(PDF_URL); }catch(e){} PDF_URL = null; }
+  pdfBar('<button type="button" id="pdfBtn" disabled>下載本期帳單 PDF</button>'); pdfHint("");
+}
+function pdfReady(){
+  if(PDF_URL) return;
+  pdfBar('<button type="button" id="pdfBtn">下載本期帳單 PDF</button>');
+  document.getElementById("pdfBtn").onclick = onPdfClick;
+  if(WANT_PDF && !PDF_AUTO_DONE){ PDF_AUTO_DONE = true; makePdf(); }
+}
+function onPdfClick(){
+  if(IN_LINE && !WANT_PDF){
+    /* 帶著目前選的期別／店別，用外部瀏覽器重開，到那邊自動產檔。 */
+    var q = "u="+encodeURIComponent(Q_UID)+"&s="+encodeURIComponent(Q_SIG)
+          + "&period="+encodeURIComponent(PERIOD) + (STORE ? "&store="+encodeURIComponent(STORE) : "")
+          + "&pdf=1&openExternalBrowser=1";
+    pdfHint("正在用手機瀏覽器開啟，請在新開的頁面按「儲存 PDF」。");
+    window.location.href = location.pathname + "?" + q;
+    return;
+  }
+  makePdf();
+}
+function loadJs(src){
+  return new Promise(function(ok, bad){
+    var s=document.createElement("script"); s.src=src; s.onload=ok;
+    s.onerror=function(){ bad(new Error("元件載入失敗：" + src.split("/").pop())); };
+    document.head.appendChild(s);
+  });
+}
+function pdfLibs(){
+  return Promise.all([
+    window.html2canvas ? 0 : loadJs("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"),
+    (window.jspdf && window.jspdf.jsPDF) ? 0 : loadJs("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js")
+  ]);
+}
+function storeTitle(d){
+  if(STORE){ var r = d.rows[0]; return r ? r.store_no + " " + r.store : STORE; }
+  var seen = {}, out = [];
+  d.rows.forEach(function(r){ if(!seen[r.store_no]){ seen[r.store_no]=1; out.push(r.store_no+" "+r.store); } });
+  return out.length === 1 ? out[0] : "全部店別（" + out.length + " 家）";
+}
+function pdfName(d){
+  var st = storeTitle(d).replace(/\s+/g, "").replace(/[\\\/:*?"<>|（）]/g, "");
+  return "享奇雞帳單_" + st + "_" + d.period.slice(0,7) + (d.period.slice(-1) === "A" ? "上半" : "下半") + ".pdf";
+}
+
+/* 把帳單排成 A4 頁（794×1123 CSS px）。一列一列塞，塞不下就換頁並重印表頭。 */
+function buildPages(d){
+  var root = document.getElementById("pdfroot"); root.innerHTML = "";
+  var multi = !STORE && STORES && STORES.order.length > 1;
+  var groups = [], byNo = {};
+  d.rows.forEach(function(r){
+    var k = r.order_no + "|" + r.store_no;
+    if(!byNo[k]){ byNo[k] = {rows:[], total:0}; groups.push(byNo[k]); }
+    byNo[k].rows.push(r); byNo[k].total += Number(r.amount || 0);
+  });
+  var now = new Date(), stamp = now.getFullYear()+"/"+(now.getMonth()+1)+"/"+now.getDate()+" "
+      + ("0"+now.getHours()).slice(-2)+":"+("0"+now.getMinutes()).slice(-2);
+  var colg = '<colgroup><col style="width:46px"><col style="width:128px"><col style="width:52px">'
+           + '<col><col style="width:78px"><col style="width:74px"><col style="width:66px"><col style="width:76px"></colgroup>';
+  var thead = '<thead><tr><th>日期</th><th>單號</th><th>類別</th><th>品名</th><th>貨號</th>'
+            + '<th>數量</th><th>單價</th><th>金額</th></tr></thead>';
+  var pages = [];
+  function newPage(first){
+    var pg = document.createElement("div"); pg.className = "pg";
+    pg.innerHTML = (first
+        ? '<h1>享奇雞 應收帳單</h1><div class="meta"><b>店別</b><span>' + esc(storeTitle(d)) + '</span>'
+          + '<b>期別</b><span>' + esc(plabel(d.label)) + '</span>'
+          + '<b>筆數</b><span>' + groups.length + ' 張單・' + d.count + ' 筆</span></div>'
+        : '<div class="meta" style="margin-top:0"><b>店別</b><span>' + esc(storeTitle(d)) + '　'
+          + esc(plabel(d.label)) + '（續）</span></div>')
+      + '<table>' + colg + thead + '<tbody></tbody></table>'
+      + '<div class="pno"><span>產出時間 ' + stamp + '</span><span class="pn"></span></div>';
+    root.appendChild(pg); pages.push(pg);
+    return pg;
+  }
+  var LIMIT = 1123 - 40 - 30;                       // 底邊留給頁碼
+  function fits(pg){ return pg.querySelector("table").getBoundingClientRect().bottom
+                            - pg.getBoundingClientRect().top <= LIMIT; }
+  var pg = newPage(true), tb = pg.querySelector("tbody");
+  function addRow(html){
+    var tmp = document.createElement("tbody"); tmp.innerHTML = html;
+    var tr = tmp.firstChild; tb.appendChild(tr);
+    if(!fits(pg)){ tb.removeChild(tr); pg = newPage(false); tb = pg.querySelector("tbody"); tb.appendChild(tr); }
+  }
+  if(!d.rows.length){
+    addRow('<tr><td colspan="8" class="c" style="padding:30px">這一期沒有任何帳單資料</td></tr>');
+  }
+  var lastStore = null;
+  groups.forEach(function(g){
+    var f = g.rows[0], neg = g.total < 0;
+    if(multi && f.store_no !== lastStore){
+      lastStore = f.store_no;
+      addRow('<tr class="st"><td colspan="8">' + esc(f.store_no + " " + f.store) + '</td></tr>');
+    }
+    g.rows.forEach(function(r, i){
+      var n = Number(r.amount) < 0;
+      addRow('<tr' + (i === 0 ? ' class="og"' : '') + '>'
+        + '<td class="c">' + (i === 0 ? esc(md(r.date)) : '') + '</td>'
+        + '<td class="on">' + (i === 0 ? esc(r.order_no) : '') + '</td>'
+        + '<td class="c">' + (i === 0 ? esc(r.kind || "") : '') + '</td>'
+        + '<td>' + esc(r.item || "—") + (r.note ? '<br><span style="color:#777;font-size:11px">備註：' + esc(r.note) + '</span>' : '') + '</td>'
+        + '<td class="c">' + esc(r.code || "") + '</td>'
+        + '<td class="n">' + esc(num(r.qty)) + ' ' + esc(r.unit || "") + '</td>'
+        + '<td class="n">' + money(r.price) + '</td>'
+        + '<td class="n' + (n ? ' neg' : '') + '">' + money(r.amount) + '</td></tr>');
+    });
+    if(g.rows.length > 1){
+      addRow('<tr><td colspan="7" class="n" style="color:#555">單號 ' + esc(f.order_no) + ' 小計</td>'
+        + '<td class="n' + (neg ? ' neg' : '') + '" style="font-weight:700">' + money(g.total) + '</td></tr>');
+    }
+  });
+  /* 合計框：原價 → 折扣／扣抵 → 本期合計（與畫面底部同一組數字）。 */
+  var adj = d.adjustments || [], due = (d.due === undefined || d.due === null) ? d.total : d.due;
+  var tag = {}; adj.forEach(function(a){ tag[a.store_no] = 1; }); var many = Object.keys(tag).length > 1;
+  var th = '<div><span>原價合計</span><span>' + money(d.total) + '</span></div>';
+  adj.forEach(function(a){
+    var nm = many && STORES && STORES.name[a.store_no] ? STORES.name[a.store_no] + ' ' : '';
+    th += '<div><span>' + esc(nm + a.label) + '</span><span class="neg">-' + money(-a.amount) + '</span></div>';
+  });
+  th += '<div class="due"><span>本期合計（' + groups.length + ' 張單）</span><span>' + money(due) + '</span></div>';
+  var box = document.createElement("div"); box.className = "tot"; box.innerHTML = th;
+  pg.appendChild(box);
+  if(box.getBoundingClientRect().bottom - pg.getBoundingClientRect().top > LIMIT){
+    pg.removeChild(box); pg = newPage(false); pg.appendChild(box);
+  }
+  pages.forEach(function(p, i){ p.querySelector(".pn").textContent = "第 " + (i+1) + " / " + pages.length + " 頁"; });
+  return pages;
+}
+
+function makePdf(){
+  var d = DATA; if(!d) return;
+  pdfBar('<button type="button" disabled>PDF 產生中…</button>'); pdfHint("");
+  var name = pdfName(d);
+  return pdfLibs().then(function(){
+    var pages = buildPages(d), doc = new window.jspdf.jsPDF({unit:"mm", format:"a4", compress:true});
+    var chain = Promise.resolve();
+    pages.forEach(function(p, i){
+      chain = chain.then(function(){
+        return window.html2canvas(p, {scale:3, backgroundColor:"#ffffff", logging:false, useCORS:true});
+      }).then(function(cv){
+        if(i) doc.addPage("a4", "p");
+        doc.addImage(cv.toDataURL("image/png"), "PNG", 0, 0, 210, 297, undefined, "FAST");
+      });
+    });
+    return chain.then(function(){
+      document.getElementById("pdfroot").innerHTML = "";
+      doc.setProperties({title: name.replace(/\.pdf$/, "")});
+      var blob = doc.output("blob");
+      window.__pdfBlob = blob; window.__pdfName = name;
+      PDF_URL = URL.createObjectURL(blob);
+      pdfBar('<a class="main" id="pdfSave" href="' + PDF_URL + '" download="' + esc(name) + '">儲存 PDF</a>'
+           + '<a href="' + PDF_URL + '" target="_blank" rel="noopener">開啟 PDF</a>');
+      pdfHint(IN_LINE
+        ? "如果按了沒反應：請點右下「⋯」→「在瀏覽器中開啟」，再按一次下載。"
+        : "檔名：" + name);
+    });
+  }).catch(function(e){
+    pdfBar('<button type="button" id="pdfBtn">重試：下載本期帳單 PDF</button>');
+    document.getElementById("pdfBtn").onclick = makePdf;
+    pdfHint("PDF 產生失敗：" + e.message);
+  });
+}
 </script>
 <script>
 /* 底部固定列的高度會跟著手機字級放大；寫死的 body padding-bottom 在安卓大字級下會把最後幾列蓋住、滑不到
