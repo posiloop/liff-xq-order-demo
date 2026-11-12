@@ -107,7 +107,8 @@
   .pg td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
   .pg td.c{text-align:center;white-space:nowrap}
   .pg tr.st td{background:#f6f5f2;font-weight:700;border-bottom:1.5px solid #cfcac2}
-  .pg tr.og td{border-top:1.5px solid #bdb7ad;font-weight:600;background:#fbfbf9}
+  .pg tr.og td{border-top:1.5px solid #bdb7ad;background:#fbfbf9}
+  .pg td.on{white-space:nowrap}
   .pg .neg{color:#b42318}
   .pg .tot{margin-top:16px;margin-left:auto;width:330px;font-size:14px}
   .pg .tot div{display:flex;justify-content:space-between;padding:5px 2px;border-bottom:1px solid #e3e0da}
@@ -494,7 +495,7 @@ function buildPages(d){
   });
   var now = new Date(), stamp = now.getFullYear()+"/"+(now.getMonth()+1)+"/"+now.getDate()+" "
       + ("0"+now.getHours()).slice(-2)+":"+("0"+now.getMinutes()).slice(-2);
-  var colg = '<colgroup><col style="width:50px"><col style="width:112px"><col style="width:52px">'
+  var colg = '<colgroup><col style="width:46px"><col style="width:128px"><col style="width:52px">'
            + '<col><col style="width:78px"><col style="width:74px"><col style="width:66px"><col style="width:76px"></colgroup>';
   var thead = '<thead><tr><th>日期</th><th>單號</th><th>類別</th><th>品名</th><th>貨號</th>'
             + '<th>數量</th><th>單價</th><th>金額</th></tr></thead>';
@@ -535,7 +536,7 @@ function buildPages(d){
       var n = Number(r.amount) < 0;
       addRow('<tr' + (i === 0 ? ' class="og"' : '') + '>'
         + '<td class="c">' + (i === 0 ? esc(md(r.date)) : '') + '</td>'
-        + '<td>' + (i === 0 ? esc(r.order_no) : '') + '</td>'
+        + '<td class="on">' + (i === 0 ? esc(r.order_no) : '') + '</td>'
         + '<td class="c">' + (i === 0 ? esc(r.kind || "") : '') + '</td>'
         + '<td>' + esc(r.item || "—") + (r.note ? '<br><span style="color:#777;font-size:11px">備註：' + esc(r.note) + '</span>' : '') + '</td>'
         + '<td class="c">' + esc(r.code || "") + '</td>'
