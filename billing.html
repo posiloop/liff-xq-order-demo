@@ -98,8 +98,11 @@
   #pdfroot{position:fixed;left:-20000px;top:0;z-index:-1}
   .pg{width:794px;height:1123px;background:#fff;color:#111;padding:44px 46px 40px;position:relative;
       font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",sans-serif;font-size:12.5px;line-height:1.45;overflow:hidden}
-  .pg h1{margin:0;font-size:22px;letter-spacing:1px}
-  .pg .meta{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;margin:12px 0 14px;font-size:13.5px}
+  .pg h1{margin:0;font-size:22px;letter-spacing:1px;color:#0f7b3f;display:flex;justify-content:space-between;align-items:baseline;
+        padding-bottom:8px;border-bottom:2.5px solid #0f7b3f}
+  .pg h1 small{font-size:12px;font-weight:400;color:#555;letter-spacing:0}
+  .pg .meta{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:12px 0 14px;font-size:13.5px;
+        background:#f6f8f7;border-radius:6px;padding:9px 14px}
   .pg .meta b{color:#555;font-weight:600}
   .pg table{width:100%;border-collapse:collapse;table-layout:fixed}
   .pg th{background:#0f7b3f;color:#fff;font-weight:600;padding:6px 5px;font-size:12px;text-align:center}
@@ -110,7 +113,13 @@
   .pg tr.og td{border-top:1.5px solid #bdb7ad;background:#fbfbf9}
   .pg td.on{white-space:nowrap}
   .pg .neg{color:#b42318}
-  .pg .tot{margin-top:16px;margin-left:auto;width:330px;font-size:14px}
+  .pg .pay{margin-top:18px;display:grid;grid-template-columns:1fr 1.25fr;gap:14px;font-size:12.5px;line-height:1.65}
+  .pg .pay>div{border:1px solid #d9e6de;border-left:4px solid #0f7b3f;border-radius:6px;padding:9px 12px}
+  .pg .pay h3{margin:0 0 4px;font-size:13.5px;color:#0f7b3f}
+  .pg .pay table{width:auto}
+  .pg .pay td{border:0;padding:0 10px 0 0;word-break:normal}
+  .pg .pay .now{margin-top:6px;padding:5px 8px;background:#fff7e0;border-radius:4px;font-weight:600}
+  .pg .tot{margin-top:16px;margin-left:auto;width:330px;font-size:14px;background:#f3f8f5;border-radius:6px;padding:8px 14px}
   .pg .tot div{display:flex;justify-content:space-between;padding:5px 2px;border-bottom:1px solid #e3e0da}
   .pg .tot div.due{border-top:2px solid #111;border-bottom:0;font-size:18px;font-weight:700;color:#0f7b3f;padding-top:8px}
   .pg .pno{position:absolute;bottom:18px;left:46px;right:46px;display:flex;justify-content:space-between;
@@ -495,17 +504,19 @@ function buildPages(d){
   });
   var now = new Date(), stamp = now.getFullYear()+"/"+(now.getMonth()+1)+"/"+now.getDate()+" "
       + ("0"+now.getHours()).slice(-2)+":"+("0"+now.getMinutes()).slice(-2);
-  var colg = '<colgroup><col style="width:46px"><col style="width:128px"><col style="width:52px">'
-           + '<col><col style="width:78px"><col style="width:74px"><col style="width:66px"><col style="width:76px"></colgroup>';
-  var thead = '<thead><tr><th>日期</th><th>單號</th><th>類別</th><th>品名</th><th>貨號</th>'
+  var colg = '<colgroup><col style="width:62px"><col style="width:112px"><col style="width:84px">'
+           + '<col><col style="width:74px"><col style="width:66px"><col style="width:76px"></colgroup>';
+  var thead = '<thead><tr><th>訂單日期</th><th>進貨時間</th><th>貨號</th><th style="text-align:left">品名</th>'
             + '<th>數量</th><th>單價</th><th>金額</th></tr></thead>';
+  var nTr = d.rows.filter(function(r){ return /調撥/.test(r.kind || ""); }).length;   // 軒徹 2026-11-17 msg39282：筆數寫出調撥幾筆、叫貨幾筆
+  var cntLine = '共 ' + d.count + ' 筆（叫貨 ' + (d.rows.length - nTr) + ' 筆・調撥 ' + nTr + ' 筆）・' + groups.length + ' 張單';
   var pages = [];
   function newPage(first){
     var pg = document.createElement("div"); pg.className = "pg";
     pg.innerHTML = (first
-        ? '<h1>享奇雞 應收帳單</h1><div class="meta"><b>店別</b><span>' + esc(storeTitle(d)) + '</span>'
+        ? '<h1><span>享奇雞 應收帳單</span><small>供應鏈達人股份有限公司</small></h1><div class="meta"><b>店別</b><span>' + esc(storeTitle(d)) + '</span>'
           + '<b>期別</b><span>' + esc(plabel(d.label)) + '</span>'
-          + '<b>筆數</b><span>' + groups.length + ' 張單・' + d.count + ' 筆</span></div>'
+          + '<b>筆數</b><span>' + cntLine + '</span></div>'
         : '<div class="meta" style="margin-top:0"><b>店別</b><span>' + esc(storeTitle(d)) + '　'
           + esc(plabel(d.label)) + '（續）</span></div>')
       + '<table>' + colg + thead + '<tbody></tbody></table>'
@@ -523,29 +534,28 @@ function buildPages(d){
     if(!fits(pg)){ tb.removeChild(tr); pg = newPage(false); tb = pg.querySelector("tbody"); tb.appendChild(tr); }
   }
   if(!d.rows.length){
-    addRow('<tr><td colspan="8" class="c" style="padding:30px">這一期沒有任何帳單資料</td></tr>');
+    addRow('<tr><td colspan="7" class="c" style="padding:30px">這一期沒有任何帳單資料</td></tr>');
   }
   var lastStore = null;
   groups.forEach(function(g){
     var f = g.rows[0], neg = g.total < 0;
     if(multi && f.store_no !== lastStore){
       lastStore = f.store_no;
-      addRow('<tr class="st"><td colspan="8">' + esc(f.store_no + " " + f.store) + '</td></tr>');
+      addRow('<tr class="st"><td colspan="7">' + esc(f.store_no + " " + f.store) + '</td></tr>');
     }
     g.rows.forEach(function(r, i){
       var n = Number(r.amount) < 0;
       addRow('<tr' + (i === 0 ? ' class="og"' : '') + '>'
-        + '<td class="c">' + (i === 0 ? esc(md(r.date)) : '') + '</td>'
-        + '<td class="on">' + (i === 0 ? esc(r.order_no) : '') + '</td>'
-        + '<td class="c">' + (i === 0 ? esc(r.kind || "") : '') + '</td>'
-        + '<td>' + esc(r.item || "—") + (r.note ? '<br><span style="color:#777;font-size:11px">備註：' + esc(r.note) + '</span>' : '') + '</td>'
+        + '<td class="c">' + esc(md(r.date)) + '</td>'   // 軒徹 2026-11-18 msg39307：訂單日期每列都寫
+        + '<td class="on">' + esc(String(r.when || "").slice(5, 16).replace("-", "/")) + '</td>'
         + '<td class="c">' + esc(r.code || "") + '</td>'
+        + '<td>' + esc(r.item || "—") + (r.note ? '<br><span style="color:#777;font-size:11px">備註：' + esc(r.note) + '</span>' : '') + '</td>'
         + '<td class="n">' + esc(num(r.qty)) + ' ' + esc(r.unit || "") + '</td>'
         + '<td class="n">' + money(r.price) + '</td>'
         + '<td class="n' + (n ? ' neg' : '') + '">' + money(r.amount) + '</td></tr>');
     });
     if(g.rows.length > 1){
-      addRow('<tr><td colspan="7" class="n" style="color:#555">單號 ' + esc(f.order_no) + ' 小計</td>'
+      addRow('<tr><td colspan="6" class="n" style="color:#555">小計</td>'
         + '<td class="n' + (neg ? ' neg' : '') + '" style="font-weight:700">' + money(g.total) + '</td></tr>');
     }
   });
@@ -563,8 +573,33 @@ function buildPages(d){
   if(box.getBoundingClientRect().bottom - pg.getBoundingClientRect().top > LIMIT){
     pg.removeChild(box); pg = newPage(false); pg.appendChild(box);
   }
+  /* 收款資訊＋付款時程（軒徹 2026-11-18 msg39307）。帳戶＝供應鏈達人一銀松山（9/1 起收付款帳戶，軒徹 msg21777 定版）。 */
+  var pay = document.createElement("div"); pay.className = "pay"; pay.innerHTML = payInfo(d);
+  pg.appendChild(pay);
+  if(pay.getBoundingClientRect().bottom - pg.getBoundingClientRect().top > LIMIT){
+    pg.removeChild(pay); pg = newPage(false); pg.appendChild(pay);
+  }
   pages.forEach(function(p, i){ p.querySelector(".pn").textContent = "第 " + (i+1) + " / " + pages.length + " 頁"; });
   return pages;
+}
+
+function payInfo(d){
+  var bank = '<div><h3>收款資訊</h3><table>'
+    + '<tr><td>銀行</td><td>第一銀行（007）松山分行</td></tr>'
+    + '<tr><td>戶名</td><td>供應鏈達人股份有限公司</td></tr>'
+    + '<tr><td>帳號</td><td><b>151-10-073613</b></td></tr></table>'
+    + '<div style="color:#555;margin-top:4px">匯款後請將匯款證明私訊給軒徹</div></div>';
+  var sch = '<div><h3>付款時程</h3>'
+    + '<div><b>上半月</b>：20 日前完成核對，無異常 21 日開立發票，30 日前完成匯款</div>'
+    + '<div><b>下半月</b>：隔月 5 日前完成核對，無異常 6 日開立發票，15 日前完成匯款</div>';
+  var m = /^(\d{4})-(\d{2})-([AB])$/.exec(d.period || "");
+  if(m){
+    var y = +m[1], mo = +m[2], nm = mo === 12 ? 1 : mo + 1;
+    sch += '<div class="now">本期（' + mo + ' 月' + (m[3] === "A" ? '上半' : '下半') + '）：'
+      + (m[3] === "A" ? mo + '/20 前核對・' + mo + '/21 開立發票・' + mo + '/30 前匯款'
+                      : nm + '/5 前核對・' + nm + '/6 開立發票・' + nm + '/15 前匯款') + '</div>';
+  }
+  return bank + sch + '</div>';
 }
 
 function makePdf(){
