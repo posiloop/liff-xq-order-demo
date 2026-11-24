@@ -57,6 +57,18 @@
   .row .qty{font-size:12.5px;color:var(--muted);width:76px;flex:0 0 76px}
   .row .qty b{color:var(--ink);font-size:14px}
   .row .md{font-size:12px;color:var(--muted)}
+  /* 勾選框（軒徹 2026-11-25 msg40375：預設全勾，沒勾的遞延到下次配單）。 */
+  .row .pk{width:22px;height:22px;flex:0 0 22px;accent-color:var(--brand)}
+  .row.off{opacity:.42}
+  .row.off input[type=number]{pointer-events:none}
+  .tools{position:sticky;top:var(--hdr,58px);z-index:15;background:var(--card);border:1px solid var(--line);
+         border-radius:12px;padding:9px 12px;margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .tools label{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:700}
+  .tools label input{width:20px;height:20px;accent-color:var(--brand)}
+  .tools .cnt{font-size:12.5px;color:var(--muted);margin-right:auto}
+  .tools button{border:0;border-radius:9px;color:#fff;font-size:15px;font-weight:700;padding:9px 16px}
+  .tools button.go{background:var(--brand)} .tools button.del{background:var(--bad)}
+  .tools button[disabled]{background:#b9c7bf}
   .row .in{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .row .lb{font-size:12.5px;color:var(--muted);font-weight:600}
   /* 🔴 font-size 必須 >=16px：iOS Safari 對小於 16px 的輸入框會自動放大整頁。 */
@@ -115,6 +127,8 @@
        2026-09-21 軒徹 msg25674「先接起來」之後，這頁有兩顆按鈕、兩種後果，
        ⛔ 不可以再用舊的那句「按下去只會算給你看」一概而論 —— 那句現在只對「試算」成立。 -->
   <div class="phase">
+    <b>勾選</b>：預設全勾。上方「<b>配單</b>」「<b>刪除</b>」只處理<b>有勾的</b>品項；
+    <b>沒勾的留在這裡，下次配單再出現</b>。刪除不會通知店家。<br>
     <b>試算看看</b>：只算給你看，一格都不寫。<br>
     <b>送出配單</b>：出 PDF（廠商採購單＋中轉調撥單），並把這批單轉成「<b>已核可</b>」
     ——<b>配單完成就是核可</b>，轉完它們就離開這個待配清單。<br>
@@ -122,6 +136,12 @@
   </div>
   <div id="demo"></div>
   <div id="msg"></div>
+  <div class="tools" id="tools" hidden>
+    <label><input type="checkbox" id="pickall" checked onchange="pickAll(this.checked)">全選</label>
+    <span class="cnt" id="pickcnt"></span>
+    <button class="go" id="tgo" onclick="preview()">配單</button>
+    <button class="del" id="tdel" onclick="doDelete()">刪除</button>
+  </div>
   <div id="body"></div>
   <div id="result"></div>
 </main>
@@ -205,8 +225,10 @@ function render(){
       + '</div></div>';
     document.getElementById("go").disabled = true;
     document.getElementById("commit").hidden = true;
+    document.getElementById("tools").hidden = true;
     return;
   }
+  document.getElementById("tools").hidden = false;
   /* 🔴 兩大區（軒徹 msg25597）：**可拆單**＝中轉倉真的有庫存的；其餘只能決定轉不轉採購。
      ⛔ 不要把「倉裡沒有」的也給一個中轉輸入框 —— 填得下去卻出不來，比不給更糟。 */
   var yes = d.rows.filter(function(r){ return r.splittable; });
@@ -282,6 +304,8 @@ function itemHtml(rs){
    會讓「哪裡換品項了」反而看不出來。 */
 function rowHtml(r, modeInHeader){
   var h = '<div class="row" id="row__'+esc(r.key)+'">'
+    +   '<input type="checkbox" class="pk" id="pick__'+esc(r.key)+'" checked'
+    +     ' onchange="pickChanged()">'
     +   '<span class="who">'+esc(r.store_name)+'</span>'
     +   '<span class="qty">叫貨 <b>'+r.qty+'</b></span>';
   if(!modeInHeader){
@@ -303,7 +327,8 @@ function rowHtml(r, modeInHeader){
 /* 開頁之後要做的收尾：逐列對一次帳、開按鈕、把「我沒算進去的東西」講出來。 */
 function afterRender(d){
   d.rows.forEach(function(r){ tally(r.key); });
-  document.getElementById("go").disabled = !d.rows.length;
+  document.getElementById("pickall").checked = true;
+  pickChanged(true);
   /* 🔴 `skipped` / `undated` 是「我沒算進去的東西」，一定要顯示出來。
      那幾列從畫面上消失時，看起來跟「本來就沒有」一模一樣。 */
   var notes = [];
@@ -358,8 +383,67 @@ function tally(k){
 
 function round3(n){ return Math.round(n * 1000) / 1000; }
 
+/* ── 勾選（軒徹 2026-11-25 msg40375）────────────────────────────────────────
+   🔴 key 一律用後端給的 `key`，⛔ 不用列序（理由同 rowEl）。 */
+function picked(k){ var e = rowEl(k, "pick"); return !!(e && e.checked); }
+function selectedKeys(){
+  return (DATA && DATA.rows || []).filter(function(r){ return picked(r.key); })
+                                  .map(function(r){ return r.key; });
+}
+function pickChanged(initial){
+  /* 勾選一變，上一次試算的綠燈就過期了（同 tally 的理由）。
+     `initial`＝剛畫完頁（含配單完成後重拉）：不清掉下方的出單結果。 */
+  setCommitReady(false);
+  if(!initial) document.getElementById("result").innerHTML = "";
+  var n = 0, all = DATA.rows.length;
+  DATA.rows.forEach(function(r){
+    var on = picked(r.key); if(on) n++;
+    var row = document.getElementById("row__"+r.key);
+    if(row) row.classList.toggle("off", !on);
+  });
+  document.getElementById("pickcnt").textContent = "已勾 " + n + " / " + all + " 列";
+  var pa = document.getElementById("pickall");
+  pa.checked = (n === all); pa.indeterminate = (n > 0 && n < all);
+  document.getElementById("tgo").disabled = !n;
+  document.getElementById("tdel").disabled = !n || !!DATA.demo;
+  document.getElementById("go").disabled = !n;
+}
+function pickAll(on){
+  DATA.rows.forEach(function(r){ var e = rowEl(r.key, "pick"); if(e) e.checked = on; });
+  pickChanged();
+}
+
+function doDelete(){
+  var keys = selectedKeys();
+  if(!keys.length) return;
+  var orders = {};
+  DATA.rows.forEach(function(r){ if(picked(r.key)) orders[r.order_no] = 1; });
+  /* 🔴 刪除不可逆（叫貨明細整列刪掉）⇒ 一定再問一次，數字講清楚。 */
+  if(!window.confirm("要刪除勾選的 " + keys.length + " 個品項嗎？（" + Object.keys(orders).length
+                     + " 張店家單）\n\n會從叫貨明細刪掉，不會通知店家。沒勾的留著，下次配單再出現。")){
+    return;
+  }
+  var b = document.getElementById("tdel");
+  b.disabled = true; b.textContent = "刪除中…";
+  fetch(ENDPOINT+"/allocate-delete", {method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({u:Q_UID, s:Q_SIG, day:DATA.day, demo: !!DATA.demo, selected:keys})})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d || !d.ok){ say(esc((d && d.error) || "刪除失敗"), "bad"); return; }
+      say("已刪除 " + d.deleted_rows + " 個品項。", "ok");
+      load();   /* 重新拉佇列：刪掉的消失、沒勾的還在 */
+    })
+    .catch(function(e){
+      say("連線中途斷了（"+esc(e.message || e)+"）。<b>我不知道那邊刪了沒有</b>——"
+        + "重新整理這一頁看那幾列還在不在，不要重按。", "bad");
+    })
+    .then(function(){ b.textContent = "刪除"; });
+}
+
 function currentLines(){
-  return DATA.rows.map(function(r){
+  /* 🔴 只送**有勾的**列。沒勾的不送＝遞延，後端也只配 `selected` 裡的那幾列。 */
+  return DATA.rows.filter(function(r){ return picked(r.key); }).map(function(r){
     return {key: r.key,
             direct: cell(r.key,"direct"),
             /* 不可拆單的列永遠送 0：那些列畫面上根本沒有中轉框。 */
@@ -375,7 +459,8 @@ function preview(){
         headers:{"Content-Type":"application/json"},
         /* 🔴 `demo` 跟著送回去，⛔ 不要讓後端從 day 反推 —— 那是拿顯示字串當旗標。 */
         body: JSON.stringify({u:Q_UID, s:Q_SIG, day:DATA.day,
-                              demo: !!DATA.demo, lines:lines})})
+                              demo: !!DATA.demo, lines:lines,
+                              selected: DATA.demo ? null : selectedKeys()})})
     .then(function(r){ return r.json(); })
     .then(function(d){ showResult(d); })
     .catch(function(e){
@@ -454,9 +539,11 @@ function commit(){
   /* 🔴 出單是不可逆的（PDF 會寄出去、單會變成已核可）⇒ 送出前**再問一次**。
      ⛔ 不要用 alert/confirm 以外的自製對話框省事，也⛔ 不要拿掉這一問：
      這頁唯一一個會改到表的動作就是它。 */
-  var n = (DATA.order_nos || []).length;
-  if(!window.confirm("要送出配單嗎？\n\n會出 PDF，並把這 " + n +
-                     " 張單轉成「已核可」（配單完成＝核可），轉完它們就離開這個清單。")){
+  var keys = selectedKeys(), od = {};
+  DATA.rows.forEach(function(r){ if(picked(r.key)) od[r.order_no] = 1; });
+  var n = Object.keys(od).length, skip = DATA.rows.length - keys.length;
+  if(!window.confirm("要送出配單嗎？\n\n會出 PDF，並把勾選的 " + keys.length + " 個品項（" + n +
+                     " 張單）轉成「已核可」。" + (skip ? "\n沒勾的 " + skip + " 個品項留著，下次配單再出現。" : ""))){
     return;
   }
   var btn = document.getElementById("commit");
@@ -464,7 +551,8 @@ function commit(){
   fetch(ENDPOINT+"/allocate-commit", {method:"POST",
         headers:{"Content-Type":"application/json"},
         body: JSON.stringify({u:Q_UID, s:Q_SIG, day:DATA.day,
-                              demo: !!DATA.demo, lines:currentLines()})})
+                              demo: !!DATA.demo, lines:currentLines(),
+                              selected: DATA.demo ? null : selectedKeys()})})
     .then(function(r){ return r.json(); })
     .then(function(d){ showCommit(d); })
     .catch(function(e){
@@ -487,8 +575,8 @@ function showCommit(d){
   var ap = d.approved || {};
   h += '<div class="msg ok"><b>出單完成。</b>'
     +  (ap.order_nos && ap.order_nos.length
-        ? "這 "+ap.order_nos.length+" 張單（"+ap.order_nos.map(esc).join("、")
-          +"）已轉成<b>已核可</b>，共改了 "+ap.rows+" 列，已離開待配清單。"
+        ? "勾選的 "+ap.rows+" 個品項（"+ap.order_nos.length+" 張單："+ap.order_nos.map(esc).join("、")
+          +"）已轉成<b>已核可</b>，已離開待配清單。沒勾的還留在上面，下次配單再處理。"
         : "（示範資料，沒有動到任何真的單。）")
     +  '</div>';
   h += '<div class="card"><h3><span>產生的單</span></h3>';
@@ -513,6 +601,7 @@ function showCommit(d){
   }
   document.getElementById("result").innerHTML = h;
   document.getElementById("result").scrollIntoView({behavior:"smooth", block:"start"});
+  if(!DATA.demo) load();   /* 重拉佇列：配掉的消失、沒勾的留著 */
 }
 
 load();
