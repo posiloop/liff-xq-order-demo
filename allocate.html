@@ -229,6 +229,9 @@ function render(){
     return;
   }
   document.getElementById("tools").hidden = false;
+  /* 工具列黏在標題列正下方：標題高度隨瀏海／字級變，量實際高度，⛔ 不寫死。 */
+  document.documentElement.style.setProperty("--hdr",
+    document.querySelector("header").offsetHeight + "px");
   /* 🔴 兩大區（軒徹 msg25597）：**可拆單**＝中轉倉真的有庫存的；其餘只能決定轉不轉採購。
      ⛔ 不要把「倉裡沒有」的也給一個中轉輸入框 —— 填得下去卻出不來，比不給更糟。 */
   var yes = d.rows.filter(function(r){ return r.splittable; });
