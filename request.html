@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>享奇雞 內部申請</title>
+<style>
+  :root{
+    --bg:#f5f5f3; --card:#fff; --line:#e0ddd8; --ink:#1c1c1c; --muted:#6b6b6b;
+    --brand:#4A5560; --ok:#0f7b3f; --bad:#b42318; --sel:#226844;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  button,select,input{touch-action:manipulation}
+  html,body{max-width:100%;overflow-x:hidden}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",system-ui,sans-serif;
+       font-size:16px;line-height:1.55;padding-bottom:100px}
+  header{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;
+         padding:calc(env(safe-area-inset-top) + 12px) 14px 12px}
+  header .t{font-weight:700;font-size:17px}
+  header .t small{display:block;font-weight:400;opacity:.92;font-size:12.5px}
+  main{padding:12px}
+  .fld{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+  .fld label{display:block;font-weight:700;font-size:14.5px;margin-bottom:8px}
+  .ln{display:flex;justify-content:space-between;padding:7px 0;border-top:1px solid var(--line);font-size:15px}
+  .ln:first-of-type{border-top:0}
+  .empty{color:var(--muted);font-size:14px}
+  /* 🔴 font-size >=16px：iOS 對小於 16px 的輸入框會自動放大整頁 */
+  input,select{width:100%;font-size:16px;padding:10px;border:1.5px solid var(--line);border-radius:8px;background:#fff;font-family:inherit}
+  .step{display:flex;align-items:center;gap:10px}
+  .step button{flex:0 0 54px;height:48px;font-size:24px;border:1.5px solid var(--line);border-radius:10px;background:#fff}
+  .step input{text-align:center;font-size:22px;font-weight:700}
+  .cal-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .cal-h button{border:0;background:none;font-size:22px;padding:4px 12px}
+  .cal-h b{font-size:16px}
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+  .cal .w{font-size:12.5px;color:var(--muted)}
+  .cal .d{padding:9px 0;border-radius:8px;font-size:15px;background:#fafaf8}
+  .cal .d.x{visibility:hidden}
+  .cal .d.on{background:var(--sel);color:#fff;font-weight:700}
+  .cal .d.mid{background:#d9ece1}
+  .cal .d.today{outline:1.5px solid var(--brand)}
+  .tip{color:var(--muted);font-size:12.5px;margin-top:6px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chips button{border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:8px 14px;font-size:15px}
+  .chips button.on{background:var(--sel);border-color:var(--sel);color:#fff}
+  .bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
+       padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);display:flex;justify-content:flex-end}
+  .bar button{background:var(--brand);color:#fff;border:0;border-radius:10px;padding:12px 26px;font-size:16px;font-weight:700}
+  .bar button[disabled]{background:#b9b9b9}
+  .msg{padding:13px;border-radius:12px;margin-bottom:12px;font-size:14.5px;line-height:1.7}
+  .msg.bad{background:#fdecea;border:1px solid #f2b5ae;color:var(--bad)}
+  .msg.ok{background:#eef7f1;border:1px solid #a9d6bc;color:var(--ok)}
+</style>
+</head>
+<body>
+<header><div class="t" id="title">內部申請<small id="sub">載入中…</small></div></header>
+<main>
+  <div id="msg"></div>
+
+  <div id="ot" style="display:none">
+    <div class="fld"><label>今天的出勤</label><div id="att"></div></div>
+    <div class="fld">
+      <label>申請加班幾小時</label>
+      <div class="step">
+        <button type="button" id="minus">−</button>
+        <input id="hours" inputmode="decimal" value="1">
+        <button type="button" id="plus">＋</button>
+      </div>
+      <div class="tip">以半小時為單位，0.5～12 小時</div>
+    </div>
+  </div>
+
+  <div id="lv" style="display:none">
+    <div class="fld">
+      <label>選擇日期</label>
+      <div class="cal-h"><button type="button" id="prev">‹</button><b id="ym"></b><button type="button" id="next">›</button></div>
+      <div class="cal" id="cal"></div>
+      <div class="tip" id="range">點一天＝休一天；再點另一天＝連續休到那天</div>
+    </div>
+    <div class="fld"><label>選擇假別</label><div class="chips" id="types"></div></div>
+  </div>
+</main>
+<div class="bar" id="bar" style="display:none"><button type="button" id="send">送出申請</button></div>
+<script>
+var ENDPOINT = "https://hook.aemassinc.net/xq";
+var P = new URLSearchParams(location.search);
+var U = P.get("u") || "", S = P.get("s") || "", T = P.get("t") || "";
+var A = null, B = null, LEAVE = "", VIEW = null, TODAY = "";
+
+function $(id){ return document.getElementById(id); }
+function esc(t){ return String(t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];}); }
+function msg(kind, text){ $("msg").innerHTML = text ? '<div class="msg '+kind+'">'+esc(text)+'</div>' : ""; window.scrollTo(0,0); }
+function pad(n){ return (n<10?"0":"")+n; }
+function iso(y,m,d){ return y+"-"+pad(m+1)+"-"+pad(d); }
+
+function renderAtt(rows){
+  if (!rows || !rows.length){ $("att").innerHTML = '<div class="empty">今天還沒有打卡紀錄</div>'; return; }
+  $("att").innerHTML = rows.map(function(r){
+    return '<div class="ln"><span>'+esc(r.kind)+'</span><span>'+esc(r.time.slice(0,5))+'</span></div>';
+  }).join("");
+}
+function setHours(v){
+  v = Math.round(parseFloat(v)*2)/2;
+  if (isNaN(v)) v = 1;
+  v = Math.max(0.5, Math.min(12, v));
+  $("hours").value = v;
+}
+$("minus").onclick = function(){ setHours(parseFloat($("hours").value) - 0.5); };
+$("plus").onclick = function(){ setHours(parseFloat($("hours").value) + 0.5); };
+$("hours").onchange = function(){ setHours(this.value); };
+
+function renderCal(){
+  var y = VIEW.getFullYear(), m = VIEW.getMonth();
+  $("ym").textContent = y+" 年 "+(m+1)+" 月";
+  var first = new Date(y,m,1).getDay(), n = new Date(y,m+1,0).getDate();
+  var h = "日一二三四五六".split("").map(function(w){ return '<div class="w">'+w+'</div>'; }).join("");
+  for (var i=0;i<first;i++) h += '<div class="d x"></div>';
+  for (var d=1; d<=n; d++){
+    var k = iso(y,m,d), c = "d";
+    if (A && (k===A || k===B)) c += " on";
+    else if (A && B && k>A && k<B) c += " mid";
+    if (k===TODAY) c += " today";
+    h += '<div class="'+c+'" data-k="'+k+'">'+d+'</div>';
+  }
+  $("cal").innerHTML = h;
+  [].forEach.call(document.querySelectorAll(".cal .d[data-k]"), function(el){
+    el.onclick = function(){ pick(el.getAttribute("data-k")); };
+  });
+  var r = !A ? "點一天＝休一天；再點另一天＝連續休到那天"
+            : (A===B ? "已選 "+A+"（1 天）" : "已選 "+A+" ～ "+B);
+  $("range").textContent = r;
+}
+function pick(k){
+  if (!A || A!==B){ A = k; B = k; }          // 沒選或已是區間 ⇒ 重新從這天開始
+  else if (k < A){ B = A; A = k; }
+  else if (k === A){ A = null; B = null; }   // 再點同一天＝取消
+  else { B = k; }
+  renderCal();
+}
+$("prev").onclick = function(){ VIEW = new Date(VIEW.getFullYear(), VIEW.getMonth()-1, 1); renderCal(); };
+$("next").onclick = function(){ VIEW = new Date(VIEW.getFullYear(), VIEW.getMonth()+1, 1); renderCal(); };
+
+function renderTypes(list){
+  $("types").innerHTML = list.map(function(t){ return '<button type="button" data-t="'+esc(t)+'">'+esc(t)+'</button>'; }).join("");
+  [].forEach.call(document.querySelectorAll("#types button"), function(b){
+    b.onclick = function(){
+      LEAVE = b.getAttribute("data-t");
+      [].forEach.call(document.querySelectorAll("#types button"), function(x){ x.className = x===b ? "on" : ""; });
+    };
+  });
+}
+
+function load(){
+  if (!U || !S || (T!=="加班" && T!=="休假")){ $("sub").textContent=""; msg("bad","此功能尚未開放"); return; }
+  $("title").firstChild.nodeValue = "申請"+T;
+  fetch(ENDPOINT+"/clock-req-view?u="+encodeURIComponent(U)+"&s="+encodeURIComponent(S)+"&t="+encodeURIComponent(T))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok){ $("sub").textContent=""; msg("bad", d.error || "此功能尚未開放"); return; }
+      $("sub").textContent = d.name;
+      TODAY = d.date;
+      if (T==="加班"){ renderAtt(d.today); $("ot").style.display=""; }
+      else {
+        var p = d.date.split("-"); VIEW = new Date(+p[0], +p[1]-1, 1);
+        renderCal(); renderTypes(d.leave_types); $("lv").style.display="";
+      }
+      $("bar").style.display="";
+    })
+    .catch(function(){ $("sub").textContent=""; msg("bad","連線失敗，請稍後再開一次"); });
+}
+
+$("send").onclick = function(){
+  var body = {u:U, s:S, type:T};
+  if (T==="加班"){ setHours($("hours").value); body.hours = parseFloat($("hours").value); }
+  else {
+    if (!A){ msg("bad","請在日曆上選日期"); return; }
+    if (!LEAVE){ msg("bad","請選假別"); return; }
+    body.date = A; body.end = B; body.leave = LEAVE;
+  }
+  $("send").disabled = true; msg("ok","送出中…");
+  fetch(ENDPOINT+"/clock-req", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok){ $("send").disabled = false; msg("bad", d.error || "送出失敗，請再按一次"); return; }
+      msg("ok","已送出（"+d.id+"），等候核可。核可結果會傳到你的 LINE。");
+      $("ot").style.display="none"; $("lv").style.display="none"; $("bar").style.display="none";
+    })
+    .catch(function(){ $("send").disabled = false; msg("bad","連線失敗，這次沒有送出，請再按一次"); });
+};
+load();
+</script>
+</body>
+</html>
