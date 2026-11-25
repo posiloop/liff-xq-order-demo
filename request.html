@@ -105,6 +105,11 @@
       <div class="chips" id="mkKinds"><button type="button" data-k="上班">上班</button><button type="button" data-k="下班">下班</button><button type="button" data-k="休息">休息</button><button type="button" data-k="返回">返回</button></div></div>
     <div class="fld"><label>補卡時間</label>
       <div style="display:flex;gap:8px;align-items:center"><select id="mkH"></select><b>:</b><select id="mkM"></select></div></div>
+    <div class="fld">
+      <label>其他申請（可複選）</label>
+      <div class="chips" id="mkExtras"><button type="button" data-x="meal">誤餐申請</button><button type="button" data-x="norest">出勤未休</button></div>
+      <div class="tip">有就點一下變色，沒有就不用點</div>
+    </div>
   </div>
 </main>
 <div class="bar" id="bar" style="display:none"><button type="button" id="send">送出申請</button></div>
@@ -239,7 +244,7 @@ function load(){
     [].forEach.call(document.querySelectorAll("#mkKinds button"), function(x){ x.className = x===b ? "on" : ""; });
   };
 });
-[].forEach.call(document.querySelectorAll("#extras button"), function(b){
+[].forEach.call(document.querySelectorAll("#extras button, #mkExtras button"), function(b){
   b.onclick = function(){ b.classList.toggle("on"); };
 });
 
@@ -253,6 +258,8 @@ $("send").onclick = function(){
     if (!MKK){ msg("bad","請選要補哪一種卡"); return; }
     if ($("mkH").value==="" || $("mkM").value===""){ msg("bad","請選補卡時間"); return; }
     body.date = A; body.kind = MKK; body.time = $("mkH").value+":"+$("mkM").value;
+    body.meal = $("mkExtras").querySelector('[data-x="meal"]').classList.contains("on");
+    body.norest = $("mkExtras").querySelector('[data-x="norest"]').classList.contains("on");
   }
   else {
     if (!A){ msg("bad","請在日曆上選日期"); return; }
