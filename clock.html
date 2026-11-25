@@ -29,6 +29,8 @@
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 12px;margin-top:16px}
   .card h3{font-size:14.5px;margin:8px 0;color:var(--muted);font-weight:700}
   .ln{display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line);font-size:15px}
+  .ln .del{margin-left:10px;border:1px solid #d9a69a;color:#9C3A1E;background:#fff;border-radius:8px;padding:2px 10px;font-size:13px}
+  .ln .r{display:flex;align-items:center}
   .empty{color:var(--muted);font-size:14px;padding:6px 0 10px}
   .msg{padding:13px;border-radius:12px;margin-bottom:12px;font-size:14.5px;line-height:1.7}
   .msg.bad{background:#fdecea;border:1px solid #f2b5ae;color:var(--bad)}
@@ -73,9 +75,28 @@ function tick(){
 function render(today){
   if (!today || !today.length){ $("list").innerHTML = '<div class="empty">還沒有打卡</div>'; return; }
   $("list").innerHTML = today.map(function(r){
-    return '<div class="ln"><span>'+esc(r.kind)+'</span><span>'+esc(r.time)+'</span></div>';
+    return '<div class="ln"><span>'+esc(r.kind)+'</span><span class="r">'+esc(r.time)+
+      '<button type="button" class="del" data-at="'+esc(r.at)+'" data-k="'+esc(r.kind)+'" data-t="'+esc(r.time.slice(0,5))+'">刪除</button></span></div>';
   }).join("");
+  bindDel($("list"), render);
 }
+function delPunch(at, kind, time, done){
+  if (!confirm("刪除這筆「"+kind+" "+time+"」打卡？")) return;
+  fetch(ENDPOINT+"/clock-del", {method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({u:U, s:S, at:at})})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok){ msg("bad", d.error || "刪除失敗，請再按一次"); return; }
+      msg("ok", "已刪除 "+kind+" "+time); done(d.today);
+    })
+    .catch(function(){ msg("bad","連線失敗，沒有刪掉，請再按一次"); });
+}
+function bindDel(box, done){
+  [].forEach.call(box.querySelectorAll(".del"), function(b){
+    b.onclick = function(){ delPunch(b.getAttribute("data-at"), b.getAttribute("data-k"), b.getAttribute("data-t"), done); };
+  });
+}
+
 var BTNS = ["bIn","bOut","bBrk","bBack"];
 function setBusy(b){ busy = b; BTNS.forEach(function(id){ $(id).disabled = b; }); }
 
