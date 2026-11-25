@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>享奇雞 內部申請</title>
 <style>
   :root{
@@ -10,6 +10,7 @@
     --brand:#4A5560; --ok:#0f7b3f; --bad:#b42318; --sel:#226844;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{touch-action:manipulation}
   button,select,input{touch-action:manipulation}
   html,body{max-width:100%;overflow-x:hidden}
   body{margin:0;background:var(--bg);color:var(--ink);
@@ -264,6 +265,13 @@ $("send").onclick = function(){
     .catch(function(){ $("send").disabled = false; msg("bad","連線失敗，這次沒有送出，請再按一次"); });
 };
 load();
+</script>
+<script>
+// 連點不放大（軒徹 msg40581）：iOS 有時不理 user-scalable=no，這裡再擋雙擊與兩指縮放
+(function(){ var last = 0;
+  document.addEventListener("touchend", function(e){ if (e.target.closest && e.target.closest("button,input,select,a,label")) return; var n = Date.now(); if (n - last < 350) e.preventDefault(); last = n; }, {passive:false});
+  document.addEventListener("gesturestart", function(e){ e.preventDefault(); });
+})();
 </script>
 </body>
 </html>
