@@ -222,6 +222,10 @@ function load(){
       if (!d.ok){ $("sub").textContent=""; msg("bad", d.error || "此功能尚未開放"); return; }
       $("sub").textContent = d.name;
       TODAY = d.date;
+      if (!d.meal_ok){   // msg40631：誤餐只開放給名單上的人（後端也擋）
+        [].forEach.call(document.querySelectorAll('[data-x="meal"]'), function(b){ b.classList.remove("on"); b.style.display="none"; });
+        [].forEach.call(document.querySelectorAll(".tip"), function(t){ t.textContent = t.textContent.replace("只申請誤餐或出勤未休就填 0","只申請出勤未休就填 0"); });
+      }
       if (T==="加班"){ renderAtt(d.today); $("ot").style.display=""; }
       else {
         var p = d.date.split("-"); VIEW = new Date(+p[0], +p[1]-1, 1);
