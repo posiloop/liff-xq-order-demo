@@ -103,7 +103,8 @@
     <div class="fld"><label>當天已有的打卡</label><div id="mkDay"><div class="empty">先在上面日曆點要補的那一天</div></div></div>
     <div class="fld"><label>要補哪一種卡</label>
       <div class="chips" id="mkKinds"><button type="button" data-k="上班">上班</button><button type="button" data-k="下班">下班</button><button type="button" data-k="休息">休息</button><button type="button" data-k="返回">返回</button></div></div>
-    <div class="fld"><label>補卡時間</label><input type="time" id="mkTime"></div>
+    <div class="fld"><label>補卡時間</label>
+      <div style="display:flex;gap:8px;align-items:center"><select id="mkH"></select><b>:</b><select id="mkM"></select></div></div>
   </div>
 </main>
 <div class="bar" id="bar" style="display:none"><button type="button" id="send">送出申請</button></div>
@@ -227,6 +228,11 @@ function load(){
     .catch(function(){ $("sub").textContent=""; msg("bad","連線失敗，請稍後再開一次"); });
 }
 
+// 補卡時間用兩個下拉（msg40582：iOS 的 time 輸入框會撐出畫面）
+(function(){ var h = '<option value="">時</option>', m = '<option value="">分</option>';
+  for (var i=0;i<24;i++) h += '<option value="'+pad(i)+'">'+pad(i)+'</option>';
+  for (var j=0;j<60;j++) m += '<option value="'+pad(j)+'">'+pad(j)+'</option>';
+  $("mkH").innerHTML = h; $("mkM").innerHTML = m; })();
 [].forEach.call(document.querySelectorAll("#mkKinds button"), function(b){
   b.onclick = function(){
     MKK = b.getAttribute("data-k");
@@ -245,8 +251,8 @@ $("send").onclick = function(){
   else if (T==="補卡"){
     if (!A){ msg("bad","請在日曆上選日期"); return; }
     if (!MKK){ msg("bad","請選要補哪一種卡"); return; }
-    if (!$("mkTime").value){ msg("bad","請填補卡時間"); return; }
-    body.date = A; body.kind = MKK; body.time = $("mkTime").value;
+    if ($("mkH").value==="" || $("mkM").value===""){ msg("bad","請選補卡時間"); return; }
+    body.date = A; body.kind = MKK; body.time = $("mkH").value+":"+$("mkM").value;
   }
   else {
     if (!A){ msg("bad","請在日曆上選日期"); return; }
