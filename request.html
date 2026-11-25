@@ -69,6 +69,11 @@
       </div>
       <div class="tip">以半小時為單位，0.5～12 小時</div>
     </div>
+    <div class="fld">
+      <label>其他申請（可複選）</label>
+      <div class="chips" id="extras"><button type="button" data-x="meal">誤餐申請</button><button type="button" data-x="norest">出勤未休</button></div>
+      <div class="tip">有就點一下變色，沒有就不用點</div>
+    </div>
   </div>
 
   <div id="lv" style="display:none">
@@ -194,9 +199,15 @@ function load(){
     .catch(function(){ $("sub").textContent=""; msg("bad","連線失敗，請稍後再開一次"); });
 }
 
+[].forEach.call(document.querySelectorAll("#extras button"), function(b){
+  b.onclick = function(){ b.classList.toggle("on"); };
+});
+
 $("send").onclick = function(){
   var body = {u:U, s:S, type:T};
-  if (T==="加班"){ setHours($("hours").value); body.hours = parseFloat($("hours").value); }
+  if (T==="加班"){ setHours($("hours").value); body.hours = parseFloat($("hours").value);
+    body.meal = $("extras").querySelector('[data-x="meal"]').classList.contains("on");
+    body.norest = $("extras").querySelector('[data-x="norest"]').classList.contains("on"); }
   else {
     if (!A){ msg("bad","請在日曆上選日期"); return; }
     if (!LEAVE){ msg("bad","請選假別"); return; }
