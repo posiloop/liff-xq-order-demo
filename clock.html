@@ -26,7 +26,7 @@
   .btns{display:flex;gap:12px}
   .btns button{flex:1;border:0;border-radius:14px;padding:26px 0;font-size:22px;font-weight:700;color:#fff}
   #bIn{background:var(--in)} #bOut{background:var(--out)} #bBrk{background:#1F4E79} #bBack{background:#4A5560}
-  .btns button[disabled]{background:#b9b9b9}
+  .btns button[disabled],.btns button.off{background:#b9b9b9 !important}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 12px;margin-top:16px}
   .card h3{font-size:14.5px;margin:8px 0;color:var(--muted);font-weight:700}
   .ln{display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line);font-size:15px}
@@ -101,11 +101,12 @@ function bindDel(box, done){
 
 var BTNS = ["bIn","bOut","bBrk","bBack"];
 var KIND = {bIn:"上班", bOut:"下班", bBrk:"休息", bBack:"返回"};
-var ALLOWED = null;   // 防呆（msg40566）：後端回的「現在能按哪幾顆」，其餘變灰
-function setBusy(b){ busy = b; BTNS.forEach(function(id){ $(id).disabled = b || (ALLOWED && ALLOWED.indexOf(KIND[id]) < 0); }); }
+var ALLOWED = null, WHY = {};   // 防呆（msg40566）：後端回的「現在能按哪幾顆」，其餘變灰
+// msg40588：變灰的不用 disabled（按了沒反應），改成按下去在上方顯示被擋的原因
+function setBusy(b){ busy = b; BTNS.forEach(function(id){ $(id).disabled = b; $(id).className = (ALLOWED && ALLOWED.indexOf(KIND[id]) < 0) ? "off" : ""; }); }
 function onState(d){
   if (!d || !d.allowed) return;
-  ALLOWED = d.allowed; setBusy(busy);
+  ALLOWED = d.allowed; WHY = d.why || {}; setBusy(busy);
   var t = d.state + (d.shift_start ? "（"+d.shift_start+" 上班）" : "");
   if (d.state === "前一班沒下班") t += "，請先補卡";
   $("st").textContent = "目前：" + t;
@@ -130,6 +131,7 @@ function load(){
 
 function punch(kind){
   if (busy) return;
+  if (ALLOWED && ALLOWED.indexOf(kind) < 0){ msg("bad", WHY[kind] || ("現在不能按"+kind)); return; }
   if (!navigator.geolocation){ msg("bad","這支手機無法取得定位，不能打卡"); return; }
   setBusy(true); msg("ok","正在取得定位…");
   navigator.geolocation.getCurrentPosition(function(pos){
