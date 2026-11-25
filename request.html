@@ -95,7 +95,14 @@
       </div>
       <div class="tip" id="lvHrTip" style="display:none">1～8 小時</div>
     </div>
-    <div class="fld"><label>選擇假別</label><div class="chips" id="types"></div></div>
+    <div class="fld" id="lvTypes"><label>選擇假別</label><div class="chips" id="types"></div></div>
+  </div>
+
+  <div id="mk" style="display:none">
+    <div class="fld"><label>當天已有的打卡</label><div id="mkDay"><div class="empty">先在上面日曆點要補的那一天</div></div></div>
+    <div class="fld"><label>要補哪一種卡</label>
+      <div class="chips" id="mkKinds"><button type="button" data-k="上班">上班</button><button type="button" data-k="下班">下班</button><button type="button" data-k="休息">休息</button><button type="button" data-k="返回">返回</button></div></div>
+    <div class="fld"><label>補卡時間</label><input type="time" id="mkTime"></div>
   </div>
 </main>
 <div class="bar" id="bar" style="display:none"><button type="button" id="send">送出申請</button></div>
@@ -103,7 +110,7 @@
 var ENDPOINT = "https://hook.aemassinc.net/xq";
 var P = new URLSearchParams(location.search);
 var U = P.get("u") || "", S = P.get("s") || "", T = P.get("t") || "";
-var A = null, B = null, LEAVE = "", VIEW = null, TODAY = "", LEN = "day";
+var A = null, B = null, LEAVE = "", VIEW = null, TODAY = "", LEN = "day", MKK = "";
 
 function $(id){ return document.getElementById(id); }
 function esc(t){ return String(t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];}); }
@@ -147,7 +154,9 @@ function renderCal(){
   });
   var r = !A ? "點一天＝休一天；再點另一天＝連續休到那天"
             : (A===B ? "已選 "+A+"（1 天）" : "已選 "+A+" ～ "+B);
+  if (T==="補卡") r = A ? "已選 "+A : "點要補卡的那一天（今天以前）";
   $("range").textContent = r;
+  if (T==="補卡"){ $("lvLen").style.display = "none"; return; }
   // 按小時只給單日（msg40529）；選成區間就自動回整天
   $("lvLen").style.display = (A && A===B) ? "" : "none";
   if (!(A && A===B)) setLen("day");
@@ -159,7 +168,20 @@ function setLen(l){
   $("lvHrTip").style.display = l==="hr" ? "" : "none";
 }
 function setLvHours(v){ v = Math.round(parseFloat(v)); if (isNaN(v)) v = 1; $("lvHours").value = Math.max(1, Math.min(8, v)); }
+function loadDay(k){
+  $("mkDay").innerHTML = '<div class="empty">讀取中…</div>';
+  fetch(ENDPOINT+"/clock-day?u="+encodeURIComponent(U)+"&s="+encodeURIComponent(S)+"&d="+encodeURIComponent(k))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok){ $("mkDay").innerHTML = '<div class="empty">'+esc(d.error||"讀取失敗")+'</div>'; return; }
+      $("mkDay").innerHTML = d.rows.length ? d.rows.map(function(r){
+        return '<div class="ln"><span>'+esc(r.kind)+'</span><span>'+esc(r.time.slice(0,5))+'</span></div>'; }).join("")
+        : '<div class="empty">這天沒有打卡紀錄</div>';
+    })
+    .catch(function(){ $("mkDay").innerHTML = '<div class="empty">連線失敗，請再點一次日期</div>'; });
+}
 function pick(k){
+  if (T==="補卡"){ if (k > TODAY) return; A = k; B = k; renderCal(); loadDay(k); return; }
   if (!A || A!==B){ A = k; B = k; }          // 沒選或已是區間 ⇒ 重新從這天開始
   else if (k < A){ B = A; A = k; }
   else if (k === A){ A = null; B = null; }   // 再點同一天＝取消
@@ -184,8 +206,9 @@ function renderTypes(list){
 }
 
 function load(){
-  if (!U || !S || (T!=="加班" && T!=="休假")){ $("sub").textContent=""; msg("bad","此功能尚未開放"); return; }
-  $("title").firstChild.nodeValue = "申請"+T;
+  if (!U || !S){ $("sub").textContent=""; msg("bad","此功能尚未開放"); return; }
+  if (T!=="加班" && T!=="休假" && T!=="補卡"){ $("sub").textContent=""; msg("bad","此功能尚未開放"); return; }
+  $("title").firstChild.nodeValue = T==="補卡" ? "補卡" : "申請"+T;
   fetch(ENDPOINT+"/clock-req-view?u="+encodeURIComponent(U)+"&s="+encodeURIComponent(S)+"&t="+encodeURIComponent(T))
     .then(function(r){ return r.json(); })
     .then(function(d){
@@ -196,12 +219,19 @@ function load(){
       else {
         var p = d.date.split("-"); VIEW = new Date(+p[0], +p[1]-1, 1);
         renderCal(); renderTypes(d.leave_types); $("lv").style.display="";
+        if (T==="補卡"){ $("lvTypes").style.display="none"; $("mk").style.display=""; }
       }
       $("bar").style.display="";
     })
     .catch(function(){ $("sub").textContent=""; msg("bad","連線失敗，請稍後再開一次"); });
 }
 
+[].forEach.call(document.querySelectorAll("#mkKinds button"), function(b){
+  b.onclick = function(){
+    MKK = b.getAttribute("data-k");
+    [].forEach.call(document.querySelectorAll("#mkKinds button"), function(x){ x.className = x===b ? "on" : ""; });
+  };
+});
 [].forEach.call(document.querySelectorAll("#extras button"), function(b){
   b.onclick = function(){ b.classList.toggle("on"); };
 });
@@ -211,6 +241,12 @@ $("send").onclick = function(){
   if (T==="加班"){ setHours($("hours").value); body.hours = parseFloat($("hours").value);
     body.meal = $("extras").querySelector('[data-x="meal"]').classList.contains("on");
     body.norest = $("extras").querySelector('[data-x="norest"]').classList.contains("on"); }
+  else if (T==="補卡"){
+    if (!A){ msg("bad","請在日曆上選日期"); return; }
+    if (!MKK){ msg("bad","請選要補哪一種卡"); return; }
+    if (!$("mkTime").value){ msg("bad","請填補卡時間"); return; }
+    body.date = A; body.kind = MKK; body.time = $("mkTime").value;
+  }
   else {
     if (!A){ msg("bad","請在日曆上選日期"); return; }
     if (!LEAVE){ msg("bad","請選假別"); return; }
@@ -223,7 +259,7 @@ $("send").onclick = function(){
     .then(function(d){
       if (!d.ok){ $("send").disabled = false; msg("bad", d.error || "送出失敗，請再按一次"); return; }
       msg("ok","已送出（"+d.id+"），等候核可。核可結果會傳到你的 LINE。");
-      $("ot").style.display="none"; $("lv").style.display="none"; $("bar").style.display="none";
+      $("ot").style.display="none"; $("lv").style.display="none"; $("mk").style.display="none"; $("bar").style.display="none";
     })
     .catch(function(){ $("send").disabled = false; msg("bad","連線失敗，這次沒有送出，請再按一次"); });
 };
