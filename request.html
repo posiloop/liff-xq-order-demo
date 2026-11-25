@@ -114,26 +114,8 @@ function iso(y,m,d){ return y+"-"+pad(m+1)+"-"+pad(d); }
 function renderAtt(rows){
   if (!rows || !rows.length){ $("att").innerHTML = '<div class="empty">今天還沒有打卡紀錄</div>'; return; }
   $("att").innerHTML = rows.map(function(r){
-    return '<div class="ln"><span>'+esc(r.kind)+'</span><span class="r">'+esc(r.time.slice(0,5))+
-      '<button type="button" class="del" data-at="'+esc(r.at)+'" data-k="'+esc(r.kind)+'" data-t="'+esc(r.time.slice(0,5))+'">刪除</button></span></div>';
+    return '<div class="ln"><span>'+esc(r.kind)+'</span><span>'+esc(r.time.slice(0,5))+'</span></div>';
   }).join("");
-  bindDel($("att"), renderAtt);
-}
-function delPunch(at, kind, time, done){
-  if (!confirm("刪除這筆「"+kind+" "+time+"」打卡？")) return;
-  fetch(ENDPOINT+"/clock-del", {method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({u:U, s:S, at:at})})
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      if (!d.ok){ msg("bad", d.error || "刪除失敗，請再按一次"); return; }
-      msg("ok", "已刪除 "+kind+" "+time); done(d.today);
-    })
-    .catch(function(){ msg("bad","連線失敗，沒有刪掉，請再按一次"); });
-}
-function bindDel(box, done){
-  [].forEach.call(box.querySelectorAll(".del"), function(b){
-    b.onclick = function(){ delPunch(b.getAttribute("data-at"), b.getAttribute("data-k"), b.getAttribute("data-t"), done); };
-  });
 }
 
 function setHours(v){
