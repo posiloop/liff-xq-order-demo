@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>享奇雞 內部打卡</title>
+<style>
+  :root{
+    --bg:#f5f5f3; --card:#fff; --line:#e0ddd8; --ink:#1c1c1c; --muted:#6b6b6b;
+    --brand:#4A5560; --in:#226844; --out:#9C3A1E; --ok:#0f7b3f; --bad:#b42318;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  button{touch-action:manipulation}
+  html,body{max-width:100%;overflow-x:hidden}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"PingFang TC","Heiti TC","Noto Sans CJK TC",system-ui,sans-serif;
+       font-size:16px;line-height:1.55}
+  header{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;
+         padding:calc(env(safe-area-inset-top) + 12px) 14px 12px}
+  header .t{font-weight:700;font-size:17px}
+  header .t small{display:block;font-weight:400;opacity:.92;font-size:12.5px}
+  main{padding:14px}
+  .clock{text-align:center;font-size:44px;font-weight:700;letter-spacing:.04em;margin:10px 0 2px}
+  .date{text-align:center;color:var(--muted);font-size:14px;margin-bottom:16px}
+  .btns{display:flex;gap:12px}
+  .btns button{flex:1;border:0;border-radius:14px;padding:26px 0;font-size:22px;font-weight:700;color:#fff}
+  #bIn{background:var(--in)} #bOut{background:var(--out)}
+  .btns button[disabled]{background:#b9b9b9}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 12px;margin-top:16px}
+  .card h3{font-size:14.5px;margin:8px 0;color:var(--muted);font-weight:700}
+  .ln{display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line);font-size:15px}
+  .empty{color:var(--muted);font-size:14px;padding:6px 0 10px}
+  .msg{padding:13px;border-radius:12px;margin-bottom:12px;font-size:14.5px;line-height:1.7}
+  .msg.bad{background:#fdecea;border:1px solid #f2b5ae;color:var(--bad)}
+  .msg.ok{background:#eef7f1;border:1px solid #a9d6bc;color:var(--ok)}
+  .hint{color:var(--muted);font-size:12.5px;text-align:center;margin-top:12px}
+</style>
+</head>
+<body>
+<header><div class="t">🕘 內部打卡<small id="sub">載入中…</small></div></header>
+<main>
+  <div id="msg"></div>
+  <div id="ui" style="display:none">
+    <div class="clock" id="clk">--:--:--</div>
+    <div class="date" id="dt"></div>
+    <div class="btns">
+      <button id="bIn" type="button">上班</button>
+      <button id="bOut" type="button">下班</button>
+    </div>
+    <div class="card"><h3>今天的打卡</h3><div id="list"></div></div>
+    <div class="hint">打卡會記錄當下時間與 GPS 定位，請允許定位。</div>
+  </div>
+</main>
+<script>
+var ENDPOINT = "https://hook.aemassinc.net/xq";
+var P = new URLSearchParams(location.search);
+var U = P.get("u") || "", S = P.get("s") || "";
+var busy = false;
+
+function $(id){ return document.getElementById(id); }
+function esc(t){ return String(t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];}); }
+function msg(kind, text){ $("msg").innerHTML = text ? '<div class="msg '+kind+'">'+esc(text)+'</div>' : ""; }
+function pad(n){ return (n<10?"0":"")+n; }
+function tick(){
+  var d = new Date();
+  $("clk").textContent = pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds());
+  $("dt").textContent = d.getFullYear()+"/"+pad(d.getMonth()+1)+"/"+pad(d.getDate())+" 星期"+"日一二三四五六".charAt(d.getDay());
+}
+function render(today){
+  if (!today || !today.length){ $("list").innerHTML = '<div class="empty">還沒有打卡</div>'; return; }
+  $("list").innerHTML = today.map(function(r){
+    return '<div class="ln"><span>'+esc(r.kind)+'</span><span>'+esc(r.time)+'</span></div>';
+  }).join("");
+}
+function setBusy(b){ busy = b; $("bIn").disabled = b; $("bOut").disabled = b; }
+
+function load(){
+  if (!U || !S){ $("sub").textContent = ""; msg("bad","此功能尚未開放"); return; }
+  fetch(ENDPOINT+"/clock-me?u="+encodeURIComponent(U)+"&s="+encodeURIComponent(S))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok){ $("sub").textContent = ""; msg("bad", d.error || "此功能尚未開放"); return; }
+      $("sub").textContent = d.name;
+      $("ui").style.display = "";
+      render(d.today);
+      tick(); setInterval(tick, 1000);
+    })
+    .catch(function(){ $("sub").textContent = ""; msg("bad","連線失敗，請稍後再開一次"); });
+}
+
+function punch(kind){
+  if (busy) return;
+  if (!navigator.geolocation){ msg("bad","這支手機無法取得定位，不能打卡"); return; }
+  setBusy(true); msg("ok","正在取得定位…");
+  navigator.geolocation.getCurrentPosition(function(pos){
+    msg("ok","送出中…");
+    fetch(ENDPOINT+"/clock-punch", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({u:U, s:S, kind:kind, lat:pos.coords.latitude,
+                            lng:pos.coords.longitude, acc:pos.coords.accuracy})})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        setBusy(false);
+        if (!d.ok){ msg("bad", d.error || "打卡失敗，請再按一次"); return; }
+        msg("ok", d.kind+"打卡成功 "+d.time);
+        render(d.today);
+      })
+      .catch(function(){ setBusy(false); msg("bad","連線失敗，這次沒有記到，請再按一次"); });
+  }, function(err){
+    setBusy(false);
+    msg("bad", err && err.code === 1 ? "沒有定位權限，請允許定位後再打卡" : "取得定位失敗，請到空曠處再按一次");
+  }, {enableHighAccuracy:true, timeout:20000, maximumAge:0});
+}
+$("bIn").onclick = function(){ punch("上班"); };
+$("bOut").onclick = function(){ punch("下班"); };
+load();
+</script>
+</body>
+</html>
