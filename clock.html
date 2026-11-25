@@ -24,7 +24,7 @@
   .date{text-align:center;color:var(--muted);font-size:14px;margin-bottom:16px}
   .btns{display:flex;gap:12px}
   .btns button{flex:1;border:0;border-radius:14px;padding:26px 0;font-size:22px;font-weight:700;color:#fff}
-  #bIn{background:var(--in)} #bOut{background:var(--out)}
+  #bIn{background:var(--in)} #bOut{background:var(--out)} #bBrk{background:#1F4E79} #bBack{background:#4A5560}
   .btns button[disabled]{background:#b9b9b9}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 12px;margin-top:16px}
   .card h3{font-size:14.5px;margin:8px 0;color:var(--muted);font-weight:700}
@@ -46,6 +46,10 @@
     <div class="btns">
       <button id="bIn" type="button">上班</button>
       <button id="bOut" type="button">下班</button>
+    </div>
+    <div class="btns" style="margin-top:12px">
+      <button id="bBrk" type="button">休息</button>
+      <button id="bBack" type="button">返回</button>
     </div>
     <div class="card"><h3>今天的打卡</h3><div id="list"></div></div>
     <div class="hint">打卡會記錄當下時間與 GPS 定位，請允許定位。</div>
@@ -72,7 +76,8 @@ function render(today){
     return '<div class="ln"><span>'+esc(r.kind)+'</span><span>'+esc(r.time)+'</span></div>';
   }).join("");
 }
-function setBusy(b){ busy = b; $("bIn").disabled = b; $("bOut").disabled = b; }
+var BTNS = ["bIn","bOut","bBrk","bBack"];
+function setBusy(b){ busy = b; BTNS.forEach(function(id){ $(id).disabled = b; }); }
 
 function load(){
   if (!U || !S){ $("sub").textContent = ""; msg("bad","此功能尚未開放"); return; }
@@ -84,6 +89,9 @@ function load(){
       $("ui").style.display = "";
       render(d.today);
       tick(); setInterval(tick, 1000);
+      // 從 LINE 對話框按「上班／下班／休息／返回」進來的（msg40525）⇒ 直接打那種卡
+      var K = P.get("k") || "";
+      if (["上班","下班","休息","返回"].indexOf(K) >= 0) punch(K);
     })
     .catch(function(){ $("sub").textContent = ""; msg("bad","連線失敗，請稍後再開一次"); });
 }
@@ -112,6 +120,8 @@ function punch(kind){
 }
 $("bIn").onclick = function(){ punch("上班"); };
 $("bOut").onclick = function(){ punch("下班"); };
+$("bBrk").onclick = function(){ punch("休息"); };
+$("bBack").onclick = function(){ punch("返回"); };
 load();
 </script>
 </body>
