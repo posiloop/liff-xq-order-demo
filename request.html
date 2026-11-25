@@ -78,6 +78,16 @@
       <div class="cal" id="cal"></div>
       <div class="tip" id="range">點一天＝休一天；再點另一天＝連續休到那天</div>
     </div>
+    <div class="fld" id="lvLen" style="display:none">
+      <label>請假長度</label>
+      <div class="chips" id="lens"><button type="button" data-l="day" class="on">整天</button><button type="button" data-l="hr">按小時</button></div>
+      <div class="step" id="lvHrBox" style="display:none;margin-top:10px">
+        <button type="button" id="lvMinus">−</button>
+        <input id="lvHours" inputmode="numeric" value="1">
+        <button type="button" id="lvPlus">＋</button>
+      </div>
+      <div class="tip" id="lvHrTip" style="display:none">1～8 小時</div>
+    </div>
     <div class="fld"><label>選擇假別</label><div class="chips" id="types"></div></div>
   </div>
 </main>
@@ -86,7 +96,7 @@
 var ENDPOINT = "https://hook.aemassinc.net/xq";
 var P = new URLSearchParams(location.search);
 var U = P.get("u") || "", S = P.get("s") || "", T = P.get("t") || "";
-var A = null, B = null, LEAVE = "", VIEW = null, TODAY = "";
+var A = null, B = null, LEAVE = "", VIEW = null, TODAY = "", LEN = "day";
 
 function $(id){ return document.getElementById(id); }
 function esc(t){ return String(t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];}); }
@@ -130,7 +140,17 @@ function renderCal(){
   var r = !A ? "點一天＝休一天；再點另一天＝連續休到那天"
             : (A===B ? "已選 "+A+"（1 天）" : "已選 "+A+" ～ "+B);
   $("range").textContent = r;
+  // 按小時只給單日（msg40529）；選成區間就自動回整天
+  $("lvLen").style.display = (A && A===B) ? "" : "none";
+  if (!(A && A===B)) setLen("day");
 }
+function setLen(l){
+  LEN = l;
+  [].forEach.call(document.querySelectorAll("#lens button"), function(b){ b.className = b.getAttribute("data-l")===l ? "on" : ""; });
+  $("lvHrBox").style.display = l==="hr" ? "" : "none";
+  $("lvHrTip").style.display = l==="hr" ? "" : "none";
+}
+function setLvHours(v){ v = Math.round(parseFloat(v)); if (isNaN(v)) v = 1; $("lvHours").value = Math.max(1, Math.min(8, v)); }
 function pick(k){
   if (!A || A!==B){ A = k; B = k; }          // 沒選或已是區間 ⇒ 重新從這天開始
   else if (k < A){ B = A; A = k; }
@@ -138,6 +158,10 @@ function pick(k){
   else { B = k; }
   renderCal();
 }
+[].forEach.call(document.querySelectorAll("#lens button"), function(b){ b.onclick = function(){ setLen(b.getAttribute("data-l")); }; });
+$("lvMinus").onclick = function(){ setLvHours(parseFloat($("lvHours").value) - 1); };
+$("lvPlus").onclick = function(){ setLvHours(parseFloat($("lvHours").value) + 1); };
+$("lvHours").onchange = function(){ setLvHours(this.value); };
 $("prev").onclick = function(){ VIEW = new Date(VIEW.getFullYear(), VIEW.getMonth()-1, 1); renderCal(); };
 $("next").onclick = function(){ VIEW = new Date(VIEW.getFullYear(), VIEW.getMonth()+1, 1); renderCal(); };
 
@@ -177,6 +201,7 @@ $("send").onclick = function(){
     if (!A){ msg("bad","請在日曆上選日期"); return; }
     if (!LEAVE){ msg("bad","請選假別"); return; }
     body.date = A; body.end = B; body.leave = LEAVE;
+    if (A===B && LEN==="hr"){ setLvHours($("lvHours").value); body.hours = parseFloat($("lvHours").value); }
   }
   $("send").disabled = true; msg("ok","送出中…");
   fetch(ENDPOINT+"/clock-req", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)})
